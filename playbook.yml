@@ -1,0 +1,24 @@
+- hosts: all
+  tasks:
+    - name: Update packages to their latest version
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+        name: "*"
+        state: latest
+      become: yes
+
+- hosts: all
+  tasks:
+    - name: Install packages
+      apt:
+        name:
+          - git
+        update_cache: yes
+      become: yes
+
+- hosts: all
+  environment:
+    PATH: "{{ ansible_env.HOME }}/bin:{{ ansible_env.PATH }}"
+  roles:
+    - role: quic-go

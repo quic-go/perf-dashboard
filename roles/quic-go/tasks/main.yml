@@ -1,0 +1,5 @@
+- name: Install Go
+  include_tasks: go.yml
+
+- name: Install quic-go perf
+  include_tasks: quic-go-perf.yml

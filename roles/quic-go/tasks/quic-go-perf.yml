@@ -1,0 +1,29 @@
+- name: Create ~/src/go/src/github.com/quic-go directory structure
+  ansible.builtin.file:
+    path: "{{ ansible_env.HOME }}/src/go/src/github.com/quic-go"
+    state: directory
+    mode: '0755'
+
+- name: Clone quic-go/quic-go repository
+  ansible.builtin.git:
+    repo: https://github.com/quic-go/quic-go.git
+    dest: "{{ ansible_env.HOME }}/src/go/src/github.com/quic-go/quic-go"
+    version: master
+    depth: 1
+
+- name: Clone quic-go/perf repository
+  ansible.builtin.git:
+    repo: https://github.com/quic-go/perf.git
+    dest: "{{ ansible_env.HOME }}/src/go/src/github.com/quic-go/perf"
+    version: master
+    depth: 1
+
+- name: Add replace directive to use local quic-go
+  ansible.builtin.command:
+    cmd: "go mod edit -replace=github.com/quic-go/quic-go=../quic-go"
+    chdir: "{{ ansible_env.HOME }}/src/go/src/github.com/quic-go/perf"
+
+- name: Run go mod tidy
+  ansible.builtin.command:
+    cmd: "go mod tidy"
+    chdir: "{{ ansible_env.HOME }}/src/go/src/github.com/quic-go/perf"

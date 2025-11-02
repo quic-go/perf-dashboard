@@ -1,0 +1,33 @@
+- name: Create ~/bin directory if it doesn't exist
+  ansible.builtin.file:
+    path: "{{ ansible_env.HOME }}/bin"
+    state: directory
+    mode: '0755'
+
+- name: Download Go
+  ansible.builtin.get_url:
+    url: https://go.dev/dl/go1.25.0.linux-amd64.tar.gz
+    dest: "{{ ansible_env.HOME }}/bin/go1.25.0.linux-amd64.tar.gz"
+    mode: '0644'
+
+- name: Extract Go
+  ansible.builtin.unarchive:
+    src: "{{ ansible_env.HOME }}/bin/go1.25.0.linux-amd64.tar.gz"
+    dest: "{{ ansible_env.HOME }}/bin"
+    remote_src: yes
+
+- name: Move extracted Go folder
+  ansible.builtin.command:
+    cmd: mv "{{ ansible_env.HOME }}/bin/go" "{{ ansible_env.HOME }}/bin/go1.25ex"
+    creates: "{{ ansible_env.HOME }}/bin/go1.25ex"
+
+- name: Create symlink to Go binary
+  ansible.builtin.file:
+    src: "{{ ansible_env.HOME }}/bin/go1.25ex/bin/go"
+    dest: "{{ ansible_env.HOME }}/bin/go"
+    state: link
+
+- name: Clean up downloaded archive
+  ansible.builtin.file:
+    path: "{{ ansible_env.HOME }}/bin/go1.25.0.linux-amd64.tar.gz"
+    state: absent
