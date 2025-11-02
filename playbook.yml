@@ -22,3 +22,4 @@
     PATH: "{{ ansible_env.HOME }}/bin:{{ ansible_env.PATH }}"
   roles:
     - role: quic-go
+    - role: msquic

@@ -1,0 +1,45 @@
+- name: Install build tools
+  apt:
+    name:
+      - cmake
+      - build-essential
+      - g++
+    update_cache: yes
+    state: latest
+  become: yes
+
+- name: Create ~/src/msquic directory structure
+  ansible.builtin.file:
+    path: "{{ ansible_env.HOME }}/src"
+    state: directory
+    mode: '0755'
+
+- name: Clone microsoft/msquic repository
+  ansible.builtin.git:
+    repo: https://github.com/microsoft/msquic.git
+    dest: "{{ ansible_env.HOME }}/src/msquic"
+    version: main
+    depth: 1
+    single_branch: yes
+    recursive: no
+
+- name: Initialize and update submodules shallowly
+  ansible.builtin.command:
+    cmd: git submodule update --init --recursive --depth 1
+    chdir: "{{ ansible_env.HOME }}/src/msquic"
+
+- name: Create ~/src/msquic/build directory
+  ansible.builtin.file:
+    path: "{{ ansible_env.HOME }}/src/msquic/build"
+    state: directory
+    mode: '0755'
+
+- name: cmake
+  ansible.builtin.command:
+    cmd: cmake -G 'Unix Makefiles' -DQUIC_BUILD_PERF=ON ..
+    chdir: "{{ ansible_env.HOME }}/src/msquic/build"
+
+- name: make
+  ansible.builtin.command:
+    cmd: make
+    chdir: "{{ ansible_env.HOME }}/src/msquic/build"
