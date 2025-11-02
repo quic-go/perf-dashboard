@@ -1,0 +1,65 @@
+- name: Create shutdown check script
+  become: true
+  ansible.builtin.copy:
+    dest: /root/shutdown-check.sh
+    mode: '0755'
+    content: |
+      #!/usr/bin/env bash
+      TIMER_FILE=/var/run/shutdown-timer
+      users=$(w -h | sort -u -k1,1 | wc -l)
+      now=$(date +%s)
+      if [ $users -gt 0 ]; then
+        rm -f $TIMER_FILE
+      else
+        if [ -f $TIMER_FILE ]; then
+          start=$(cat $TIMER_FILE)
+          elapsed=$((now - start))
+          echo "Elapsed time since user logout: $elapsed seconds"
+          if [ $elapsed -ge 600 ]; then
+            /usr/sbin/shutdown -P now
+          fi
+        else
+          echo $now > $TIMER_FILE
+        fi
+      fi
+
+- name: Create shutdown check service unit
+  become: true
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/shutdown-check.service
+    mode: '0644'
+    content: |
+      [Unit]
+      Description=Check if server should shut down due to inactivity
+
+      [Service]
+      Type=oneshot
+      ExecStart=/root/shutdown-check.sh
+
+- name: Create shutdown check timer unit
+  become: true
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/shutdown-check.timer
+    mode: '0644'
+    content: |
+      [Unit]
+      Description=Run shutdown check every minute
+
+      [Timer]
+      OnCalendar=*:*:00
+      Unit=shutdown-check.service
+
+      [Install]
+      WantedBy=timers.target
+
+- name: Reload systemd daemon
+  become: true
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+
+- name: Enable and start shutdown check timer
+  become: true
+  ansible.builtin.systemd_service:
+    name: shutdown-check.timer
+    enabled: true
+    state: started

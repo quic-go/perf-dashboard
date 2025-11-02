@@ -1,4 +1,9 @@
 - hosts: all
+  become: yes
+  tasks:
+    - import_tasks: auto-shutdown.yml
+
+- hosts: all
   tasks:
     - name: Update packages to their latest version
       ansible.builtin.apt:
