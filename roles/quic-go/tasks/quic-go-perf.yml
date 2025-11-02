@@ -18,12 +18,13 @@
     version: master
     depth: 1
 
-- name: Add replace directive to use local quic-go
+- name: Initialize go.work
   ansible.builtin.command:
-    cmd: "go mod edit -replace=github.com/quic-go/quic-go=../quic-go"
-    chdir: "{{ ansible_env.HOME }}/src/go/src/github.com/quic-go/perf"
+    cmd: "go work init ./perf ./quic-go"
+    chdir: "{{ ansible_env.HOME }}/src/go/src/github.com/quic-go"
+    creates: "{{ ansible_env.HOME }}/src/go/src/github.com/quic-go/go.work"
 
-- name: Run go mod tidy
+- name: Ensure perf and quic-go are in go.work
   ansible.builtin.command:
-    cmd: "go mod tidy"
-    chdir: "{{ ansible_env.HOME }}/src/go/src/github.com/quic-go/perf"
+    cmd: "go work use ./perf ./quic-go"
+    chdir: "{{ ansible_env.HOME }}/src/go/src/github.com/quic-go"
