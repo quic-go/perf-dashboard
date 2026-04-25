@@ -28,7 +28,7 @@ jobs:
   build:
     name: Build
     needs: validate
-    # if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: read
