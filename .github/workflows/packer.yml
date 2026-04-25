@@ -2,7 +2,7 @@ name: Build GCP image
 
 on:
   push:
-    branches: [ master ] 
+    branches: [ master ]
   pull_request:
   workflow_dispatch:
 
@@ -24,7 +24,7 @@ jobs:
       - name: packer init
         run: packer init .
       - name: packer validate
-        run: packer validate -syntax-only .
+        run: packer validate .
 
   build:
     name: Build
