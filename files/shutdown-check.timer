@@ -1,0 +1,9 @@
+[Unit]
+Description=Run shutdown check every minute
+
+[Timer]
+OnCalendar=*:*:00
+Unit=shutdown-check.service
+
+[Install]
+WantedBy=timers.target

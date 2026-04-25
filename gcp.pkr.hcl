@@ -53,4 +53,22 @@ build {
       "sudo ln -sf /usr/local/go/bin/go /usr/local/bin/go",
     ]
   }
+
+  # Stage the auto-shutdown files in /tmp; the SSH user can't write to
+  # privileged paths directly, so the shell provisioner installs them.
+  provisioner "file" {
+    source      = "${path.root}/files/"
+    destination = "/tmp/"
+  }
+
+  provisioner "shell" {
+    inline = [
+      "echo '=== Installing auto-shutdown service ==='",
+      "sudo install -o root -g root -m 0755 /tmp/shutdown-check.sh      /usr/local/sbin/shutdown-check.sh",
+      "sudo install -o root -g root -m 0644 /tmp/shutdown-check.service /etc/systemd/system/shutdown-check.service",
+      "sudo install -o root -g root -m 0644 /tmp/shutdown-check.timer   /etc/systemd/system/shutdown-check.timer",
+      "rm /tmp/shutdown-check.sh /tmp/shutdown-check.service /tmp/shutdown-check.timer",
+      "sudo systemctl enable shutdown-check.timer",
+    ]
+  }
 }

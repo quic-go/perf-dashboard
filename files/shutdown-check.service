@@ -1,0 +1,6 @@
+[Unit]
+Description=Check if server should shut down due to inactivity
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/shutdown-check.sh
