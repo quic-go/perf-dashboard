@@ -56,19 +56,19 @@ build {
     ]
   }
 
-  # Build MSQuic with the perf tool enabled.
+  # Build MsQuic with the perf tool enabled.
   provisioner "shell" {
     environment_vars = ["DEBIAN_FRONTEND=noninteractive"]
     inline = [
       "set -eux",
-      "echo '=== Installing MSQuic build dependencies ==='",
+      "echo '=== Installing MsQuic build dependencies ==='",
       "sudo apt-get install -y cmake build-essential g++",
 
       "echo '=== Cloning microsoft/msquic to /opt/msquic ==='",
       "sudo git clone --depth 1 --branch main --single-branch https://github.com/microsoft/msquic.git /opt/msquic",
       "sudo git -C /opt/msquic submodule update --init --recursive --depth 1",
 
-      "echo '=== Building MSQuic with QUIC_BUILD_PERF=ON ==='",
+      "echo '=== Building MsQuic with QUIC_BUILD_PERF=ON ==='",
       "sudo mkdir -p /opt/msquic/build",
       "cd /opt/msquic/build && sudo cmake -G 'Unix Makefiles' -DQUIC_BUILD_PERF=ON ..",
       "sudo make -C /opt/msquic/build",
