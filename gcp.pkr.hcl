@@ -33,6 +33,7 @@ build {
   sources = ["source.googlecompute.ubuntu"]
 
   provisioner "shell" {
+    environment_vars = ["DEBIAN_FRONTEND=noninteractive"]
     inline = [
       "echo '=== Updating package list and installing git ==='",
       "sudo apt-get update && sudo apt-get install -y git",
@@ -44,6 +45,7 @@ build {
 
   # Install Go into /usr/local/go
   provisioner "shell" {
+    environment_vars = ["DEBIAN_FRONTEND=noninteractive"]
     inline = [
       "set -eux",
       "echo '=== Installing Go ${var.go_version} ==='",
@@ -51,6 +53,25 @@ build {
       "sudo tar -C /usr/local -xzf /tmp/go.tar.gz",
       "rm /tmp/go.tar.gz",
       "sudo ln -sf /usr/local/go/bin/go /usr/local/bin/go",
+    ]
+  }
+
+  # Build MSQuic with the perf tool enabled.
+  provisioner "shell" {
+    environment_vars = ["DEBIAN_FRONTEND=noninteractive"]
+    inline = [
+      "set -eux",
+      "echo '=== Installing MSQuic build dependencies ==='",
+      "sudo apt-get install -y cmake build-essential g++",
+
+      "echo '=== Cloning microsoft/msquic to /opt/msquic ==='",
+      "sudo git clone --depth 1 --branch main --single-branch https://github.com/microsoft/msquic.git /opt/msquic",
+      "sudo git -C /opt/msquic submodule update --init --recursive --depth 1",
+
+      "echo '=== Building MSQuic with QUIC_BUILD_PERF=ON ==='",
+      "sudo mkdir -p /opt/msquic/build",
+      "cd /opt/msquic/build && sudo cmake -G 'Unix Makefiles' -DQUIC_BUILD_PERF=ON ..",
+      "sudo make -C /opt/msquic/build",
     ]
   }
 
