@@ -22,8 +22,11 @@ jobs:
         run: packer fmt -check -diff .
       - name: packer init
         run: packer init .
-      - name: packer validate
-        run: packer validate -var "gcp_project_id=${{ vars.GCP_PROJECT_ID }}" .
+      - name: packer validate (AWS)
+        run: packer validate -only=amazon-ebs.ubuntu .
+      - name: packer validate (GCP)
+        if: ${{ vars.GCP_PROJECT_ID != '' }}
+        run: packer validate -only=googlecompute.ubuntu -var "gcp_project_id=${{ vars.GCP_PROJECT_ID }}" .
 
   gcp:
     name: Build GCP image

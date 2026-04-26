@@ -19,7 +19,8 @@ variable "go_version" {
 
 variable "gcp_project_id" {
   type        = string
-  description = "Google Cloud project for the GCP Packer build"
+  description = "GCP project ID"
+  default     = ""
 }
 
 source "amazon-ebs" "ubuntu" {
