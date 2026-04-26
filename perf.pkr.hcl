@@ -73,11 +73,8 @@ build {
   provisioner "shell" {
     environment_vars = ["DEBIAN_FRONTEND=noninteractive"]
     inline = [
-      "echo '=== Updating package list and installing git ==='",
-      "sudo apt-get update && sudo apt-get install -y git",
-
-      "echo '=== Cloning quic-go source code to /opt/quic-go ==='",
-      "sudo git clone https://github.com/quic-go/quic-go.git /opt/quic-go",
+      "echo '=== Updating package list and installing base packages ==='",
+      "sudo apt-get update && sudo apt-get install -y ca-certificates curl git",
     ]
   }
 
@@ -91,6 +88,24 @@ build {
       "sudo tar -C /usr/local -xzf /tmp/go.tar.gz",
       "rm /tmp/go.tar.gz",
       "sudo ln -sf /usr/local/go/bin/go /usr/local/bin/go",
+    ]
+  }
+
+  # Build quic-go/perf against a local quic-go checkout using a Go workspace.
+  provisioner "shell" {
+    inline = [
+      "set -eux",
+      "echo '=== Cloning quic-go sources to /opt/quic-go ==='",
+      "sudo install -d -o root -g root -m 0755 /opt/quic-go",
+      "sudo git clone --depth 1 https://github.com/quic-go/perf.git /opt/quic-go/perf",
+      "sudo git clone --depth 1 https://github.com/quic-go/quic-go.git /opt/quic-go/quic-go",
+
+      "echo '=== Creating Go workspace for quic-go/perf ==='",
+      "cd /opt/quic-go",
+      "sudo go work init ./perf ./quic-go",
+
+      "echo '=== Building quic-go-perf ==='",
+      "sudo go build -o /opt/quic-go/perf/quic-go-perf ./perf/cmd",
     ]
   }
 
