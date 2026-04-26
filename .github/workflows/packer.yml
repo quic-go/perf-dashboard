@@ -30,6 +30,8 @@ jobs:
     needs: validate
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    outputs:
+      image_id: ${{ steps.manifest.outputs.image_id }}
     concurrency:
       group: packer-gcp-image
       cancel-in-progress: false
@@ -50,12 +52,24 @@ jobs:
         run: packer init .
       - name: packer build
         run: packer build -color=false -only=googlecompute.ubuntu .
+      - name: Read Packer manifest
+        id: manifest
+        run: |
+          set -euo pipefail
+          artifact_id="$(jq -r '.builds[-1].artifact_id // empty' packer-manifest.json)"
+          if [ -z "${artifact_id}" ]; then
+            echo "Could not find GCP image ID in Packer manifest" >&2
+            exit 1
+          fi
+          echo "image_id=${artifact_id}" >> "${GITHUB_OUTPUT}"
 
   aws:
     name: Build AWS image
     needs: validate
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    outputs:
+      image_id: ${{ steps.manifest.outputs.image_id }}
     concurrency:
       group: packer-aws-image
       cancel-in-progress: false
@@ -77,3 +91,30 @@ jobs:
         run: packer init .
       - name: packer build
         run: packer build -color=false -only=amazon-ebs.ubuntu .
+      - name: Read Packer manifest
+        id: manifest
+        run: |
+          set -euo pipefail
+          artifact_id="$(jq -r '.builds[-1].artifact_id // empty' packer-manifest.json)"
+          if [ -z "${artifact_id}" ]; then
+            echo "Could not find AWS image ID in Packer manifest" >&2
+            exit 1
+          fi
+          echo "image_id=${artifact_id}" >> "${GITHUB_OUTPUT}"
+
+  summary:
+    name: Build summary
+    needs: [gcp, aws]
+    if: always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Write build summary
+        run: |
+          cat >> "${GITHUB_STEP_SUMMARY}" <<'EOF'
+          ## Image Build Results
+
+          | Provider | Result | Image ID |
+          | --- | --- | --- |
+          | AWS | ${{ needs.aws.result }} | ${{ needs.aws.outputs.image_id || 'N/A' }} |
+          | GCP | ${{ needs.gcp.result }} | ${{ needs.gcp.outputs.image_id || 'N/A' }} |
+          EOF

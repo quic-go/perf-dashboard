@@ -145,4 +145,8 @@ build {
       "sudo systemctl enable shutdown-check.timer",
     ]
   }
+
+  post-processor "manifest" {
+    output = "packer-manifest.json"
+  }
 }
