@@ -1,5 +1,9 @@
 packer {
   required_plugins {
+    amazon = {
+      version = ">= 1.3.9"
+      source  = "github.com/hashicorp/amazon"
+    }
     googlecompute = {
       version = ">= 1.2.5"
       source  = "github.com/hashicorp/googlecompute"
@@ -11,6 +15,37 @@ variable "go_version" {
   type        = string
   description = "Go release to install"
   default     = "1.26.2"
+}
+
+source "amazon-ebs" "ubuntu" {
+  region = "us-west-2"
+
+  source_ami_filter {
+    filters = {
+      name                = "ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*"
+      root-device-type    = "ebs"
+      virtualization-type = "hvm"
+    }
+    most_recent = true
+    owners      = ["099720109477"]
+  }
+
+  ami_name        = "quic-perf-runner-{{timestamp}}"
+  ami_description = "QUIC perf runner"
+  instance_type   = "c6i.large"
+  ssh_username    = "ubuntu"
+
+  launch_block_device_mappings {
+    device_name           = "/dev/sda1"
+    volume_size           = 20
+    volume_type           = "gp3"
+    delete_on_termination = true
+  }
+
+  tags = {
+    Name      = "quic-perf-runner"
+    ManagedBy = "packer"
+  }
 }
 
 source "googlecompute" "ubuntu" {
@@ -30,7 +65,10 @@ source "googlecompute" "ubuntu" {
 }
 
 build {
-  sources = ["source.googlecompute.ubuntu"]
+  sources = [
+    "source.amazon-ebs.ubuntu",
+    "source.googlecompute.ubuntu",
+  ]
 
   provisioner "shell" {
     environment_vars = ["DEBIAN_FRONTEND=noninteractive"]
