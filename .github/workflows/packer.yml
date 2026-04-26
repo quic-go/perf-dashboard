@@ -23,7 +23,7 @@ jobs:
       - name: packer init
         run: packer init .
       - name: packer validate
-        run: packer validate .
+        run: packer validate -var "gcp_project_id=${{ vars.GCP_PROJECT_ID }}" .
 
   gcp:
     name: Build GCP image
@@ -52,7 +52,7 @@ jobs:
       - name: packer init
         run: packer init .
       - name: packer build
-        run: packer build -color=false -only=googlecompute.ubuntu .
+        run: packer build -color=false -only=googlecompute.ubuntu -var "gcp_project_id=${{ vars.GCP_PROJECT_ID }}" .
       - name: Read Packer manifest
         id: manifest
         run: |
@@ -70,7 +70,7 @@ jobs:
           IMAGE_NAME="${{ steps.manifest.outputs.image_id }}"
           IMAGE_NAME="${IMAGE_NAME##*/}"
           IMAGE_SIZE=$(gcloud compute images describe "${IMAGE_NAME}" \
-            --project quic-perf-dashboard \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
             --format 'value(archiveSizeBytes)')
           echo "image_size=${IMAGE_SIZE}" >> "${GITHUB_OUTPUT}"
 

@@ -17,6 +17,11 @@ variable "go_version" {
   default     = "1.26.2"
 }
 
+variable "gcp_project_id" {
+  type        = string
+  description = "Google Cloud project for the GCP Packer build"
+}
+
 source "amazon-ebs" "ubuntu" {
   region = "us-west-2"
 
@@ -49,7 +54,7 @@ source "amazon-ebs" "ubuntu" {
 }
 
 source "googlecompute" "ubuntu" {
-  project_id = "quic-perf-dashboard"
+  project_id = var.gcp_project_id
   zone       = "us-west1-b"
 
   source_image_family = "ubuntu-2404-lts-amd64"
