@@ -32,6 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       image_id: ${{ steps.manifest.outputs.image_id }}
+      image_size: ${{ steps.image_size.outputs.image_size }}
     concurrency:
       group: packer-gcp-image
       cancel-in-progress: false
@@ -62,6 +63,16 @@ jobs:
             exit 1
           fi
           echo "image_id=${artifact_id}" >> "${GITHUB_OUTPUT}"
+      - name: Determine image size
+        id: image_size
+        run: |
+          set -euo pipefail
+          IMAGE_NAME="${{ steps.manifest.outputs.image_id }}"
+          IMAGE_NAME="${IMAGE_NAME##*/}"
+          IMAGE_SIZE=$(gcloud compute images describe "${IMAGE_NAME}" \
+            --project quic-perf-dashboard \
+            --format 'value(archiveSizeBytes)')
+          echo "image_size=${IMAGE_SIZE}" >> "${GITHUB_OUTPUT}"
 
   aws:
     name: Build AWS image
@@ -70,6 +81,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       image_id: ${{ steps.manifest.outputs.image_id }}
+      image_size: ${{ steps.image_size.outputs.image_size }}
     concurrency:
       group: packer-aws-image
       cancel-in-progress: false
@@ -101,6 +113,23 @@ jobs:
             exit 1
           fi
           echo "image_id=${artifact_id}" >> "${GITHUB_OUTPUT}"
+      - name: Determine image size
+        id: image_size
+        run: |
+          set -euo pipefail
+          IMAGE_ID="${{ steps.manifest.outputs.image_id }}"
+          IMAGE_ID="${IMAGE_ID##*:}"
+          SNAPSHOT_ID=$(aws ec2 describe-images \
+            --image-ids "${IMAGE_ID}" \
+            --query 'Images[0].BlockDeviceMappings[?DeviceName==`/dev/sda1`].Ebs.SnapshotId' \
+            --output text \
+            --region us-west-2)
+          IMAGE_SIZE=$(aws ec2 describe-snapshots \
+            --snapshot-ids "${SNAPSHOT_ID}" \
+            --query 'Snapshots[0].[FullSnapshotSizeInBytes]' \
+            --output text \
+            --region us-west-2)
+          echo "image_size=${IMAGE_SIZE}" >> "${GITHUB_OUTPUT}"
 
   summary:
     name: Build summary
@@ -110,11 +139,26 @@ jobs:
     steps:
       - name: Write build summary
         run: |
+          set -euo pipefail
+
+          format_gb() {
+            if [[ "$1" =~ ^[0-9]+$ ]]; then
+              awk -v bytes="$1" 'BEGIN { printf "%.3f", bytes / 1000000000 }'
+            else
+              printf "N/A"
+            fi
+          }
+
+          aws_image_size_gb="$(format_gb "${{ needs.aws.outputs.image_size || '' }}")"
+          gcp_image_size_gb="$(format_gb "${{ needs.gcp.outputs.image_size || '' }}")"
+
           cat >> "${GITHUB_STEP_SUMMARY}" <<'EOF'
           ## Image Build Results
 
-          | Provider | Result | Image ID |
-          | --- | --- | --- |
-          | AWS | ${{ needs.aws.result }} | ${{ needs.aws.outputs.image_id || 'N/A' }} |
-          | GCP | ${{ needs.gcp.result }} | ${{ needs.gcp.outputs.image_id || 'N/A' }} |
+          | Provider | Result | Image ID | Image Size (GB) |
+          EOF
+          cat >> "${GITHUB_STEP_SUMMARY}" <<EOF
+          | --- | --- | --- | --- |
+          | AWS | ${{ needs.aws.result }} | ${{ needs.aws.outputs.image_id || 'N/A' }} | ${aws_image_size_gb} |
+          | GCP | ${{ needs.gcp.result }} | ${{ needs.gcp.outputs.image_id || 'N/A' }} | ${gcp_image_size_gb} |
           EOF
