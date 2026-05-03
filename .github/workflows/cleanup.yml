@@ -31,25 +31,33 @@ jobs:
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
         run: |
           set -euo pipefail
-          aws ec2 describe-images \
+
+          image_ids="$(aws ec2 describe-images \
             --owners self \
             --filters "Name=tag:ManagedBy,Values=packer" "Name=tag:Name,Values=quic-perf-runner" \
             --query 'sort_by(Images, &CreationDate)[:-1].ImageId' \
             --output text \
             | tr '\t' '\n' \
-            | while read -r image_id; do
-              if [ "${DRY_RUN}" = "true" ]; then
-                echo "Would delete AWS AMI: ${image_id}"
-              else
-                echo "Deleting AWS AMI: ${image_id}"
-                snapshot_ids="$(aws ec2 describe-images --image-ids "${image_id}" --query 'Images[].BlockDeviceMappings[].Ebs.SnapshotId' --output text)"
-                aws ec2 deregister-image --image-id "${image_id}"
-                for snapshot_id in ${snapshot_ids}; do
-                  echo "Deleting AWS snapshot: ${snapshot_id}"
-                  aws ec2 delete-snapshot --snapshot-id "${snapshot_id}"
-                done
-              fi
-            done
+            | sed '/^$/d')"
+
+          if [ -z "${image_ids}" ]; then
+            echo "No old AWS AMIs to delete."
+            exit 0
+          fi
+
+          while read -r image_id; do
+            if [ "${DRY_RUN}" = "true" ]; then
+              echo "Would delete AWS AMI: ${image_id}"
+            else
+              echo "Deleting AWS AMI: ${image_id}"
+              snapshot_ids="$(aws ec2 describe-images --image-ids "${image_id}" --query 'Images[].BlockDeviceMappings[].Ebs.SnapshotId' --output text)"
+              aws ec2 deregister-image --image-id "${image_id}"
+              for snapshot_id in ${snapshot_ids}; do
+                echo "Deleting AWS snapshot: ${snapshot_id}"
+                aws ec2 delete-snapshot --snapshot-id "${snapshot_id}"
+              done
+            fi
+          done <<< "${image_ids}"
 
   cleanup-gcp:
     runs-on: ubuntu-latest
@@ -68,16 +76,24 @@ jobs:
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
         run: |
           set -euo pipefail
-          gcloud compute images list \
+
+          image_names="$(gcloud compute images list \
             --filter="family=quic-perf-runner" \
             --sort-by="~creationTimestamp" \
             --format="value(name)" \
             | tail -n +2 \
-            | while read -r image_name; do
-              if [ "${DRY_RUN}" = "true" ]; then
-                echo "Would delete GCP image: ${image_name}"
-              else
-                echo "Deleting GCP image: ${image_name}"
-                gcloud compute images delete "${image_name}" --quiet
-              fi
-            done
+            | sed '/^$/d')"
+
+          if [ -z "${image_names}" ]; then
+            echo "No old GCP images to delete."
+            exit 0
+          fi
+
+          while read -r image_name; do
+            if [ "${DRY_RUN}" = "true" ]; then
+              echo "Would delete GCP image: ${image_name}"
+            else
+              echo "Deleting GCP image: ${image_name}"
+              gcloud compute images delete "${image_name}" --quiet
+            fi
+          done <<< "${image_names}"
