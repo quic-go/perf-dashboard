@@ -39,7 +39,12 @@ jobs:
                 echo "Would delete AWS AMI: ${image_id}"
               else
                 echo "Deleting AWS AMI: ${image_id}"
-                aws ec2 deregister-image --delete-associated-snapshots --image-id "${image_id}"
+                snapshot_ids="$(aws ec2 describe-images --image-ids "${image_id}" --query 'Images[].BlockDeviceMappings[].Ebs.SnapshotId' --output text)"
+                aws ec2 deregister-image --image-id "${image_id}"
+                for snapshot_id in ${snapshot_ids}; do
+                  echo "Deleting AWS snapshot: ${snapshot_id}"
+                  aws ec2 delete-snapshot --snapshot-id "${snapshot_id}"
+                done
               fi
             done
 
