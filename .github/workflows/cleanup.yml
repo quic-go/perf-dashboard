@@ -34,6 +34,7 @@ jobs:
             --filters "Name=tag:ManagedBy,Values=packer" "Name=tag:Name,Values=quic-perf-runner" \
             --query 'sort_by(Images, &CreationDate)[:-1].ImageId' \
             --output text \
+            | tr '\t' '\n' \
             | while read -r image_id; do
               if [ "${DRY_RUN}" = "true" ]; then
                 echo "Would delete AWS AMI: ${image_id}"
