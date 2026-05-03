@@ -2,13 +2,12 @@ name: Cleanup Old Packer Images
 
 on:
   schedule:
-    - cron: "0 5 * * *"
+    - cron: "0 1 * * *"
   workflow_dispatch:
     inputs:
       dry_run:
         type: boolean
         default: true
-  pull_request: # for testing
 
 permissions:
   id-token: write
@@ -26,7 +25,7 @@ jobs:
           aws-region: us-west-2
       - name: Keep only the newest AMI, delete the rest
         env:
-          DRY_RUN: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
         run: |
           set -euo pipefail
           aws ec2 describe-images \
@@ -55,7 +54,7 @@ jobs:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
       - name: Keep only the newest image, delete the rest
         env:
-          DRY_RUN: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
         run: |
           set -euo pipefail
           gcloud compute images list \
