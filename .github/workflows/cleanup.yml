@@ -16,6 +16,9 @@ permissions:
 jobs:
   cleanup-aws:
     runs-on: ubuntu-latest
+    concurrency:
+      group: cleanup-aws-image
+      cancel-in-progress: false
     steps:
       - name: Configure AWS
         uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37 # v6.1.0
@@ -50,6 +53,9 @@ jobs:
 
   cleanup-gcp:
     runs-on: ubuntu-latest
+    concurrency:
+      group: cleanup-gcp-image
+      cancel-in-progress: false
     env:
       CLOUDSDK_CORE_PROJECT: quic-perf-dashboard
     steps:
