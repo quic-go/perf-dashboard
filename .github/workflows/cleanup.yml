@@ -1,0 +1,58 @@
+name: Cleanup Old Packer Images
+
+on:
+  schedule:
+    - cron: "0 5 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        type: boolean
+        default: true
+  pull_request: # for testing
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  cleanup-aws:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS
+        uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37 # v6.1.0
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-west-2
+      - name: Keep only the newest AMI, delete the rest
+        env:
+          DRY_RUN: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
+        run: |
+          set -euo pipefail
+          aws ec2 describe-images \
+            --owners self \
+            --filters "Name=tag:ManagedBy,Values=packer" "Name=tag:Name,Values=quic-perf-runner" \
+            --query 'sort_by(Images, &CreationDate)[:-1].ImageId' \
+            --output text \
+            | xargs -r -n1 sh -c 'if [ "${DRY_RUN}" = "true" ]; then echo "Would delete AWS AMI: $1"; else echo "Deleting AWS AMI: $1"; aws ec2 deregister-image --delete-associated-snapshots --image-id "$1"; fi' sh
+
+  cleanup-gcp:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDSDK_CORE_PROJECT: quic-perf-dashboard
+    steps:
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+      - name: Keep only the newest image, delete the rest
+        env:
+          DRY_RUN: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
+        run: |
+          set -euo pipefail
+          gcloud compute images list \
+            --filter="family=quic-perf-runner" \
+            --sort-by="~creationTimestamp" \
+            --format="value(name)" \
+            | tail -n +2 \
+            | xargs -r -n1 sh -c 'if [ "${DRY_RUN}" = "true" ]; then echo "Would delete GCP image: $1"; else echo "Deleting GCP image: $1"; gcloud compute images delete "$1" --quiet; fi' sh
