@@ -1,0 +1,99 @@
+name: Cleanup Old Packer Images
+
+on:
+  schedule:
+    - cron: "0 1 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        type: boolean
+        default: true
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  cleanup-aws:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: cleanup-aws-image
+      cancel-in-progress: false
+    steps:
+      - name: Configure AWS
+        uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37 # v6.1.0
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-west-2
+      - name: Keep only the newest AMI, delete the rest
+        env:
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        run: |
+          set -euo pipefail
+
+          image_ids="$(aws ec2 describe-images \
+            --owners self \
+            --filters "Name=tag:ManagedBy,Values=packer" "Name=tag:Name,Values=quic-perf-runner" \
+            --query 'sort_by(Images, &CreationDate)[:-1].ImageId' \
+            --output text \
+            | tr '\t' '\n' \
+            | sed '/^$/d')"
+
+          if [ -z "${image_ids}" ]; then
+            echo "No old AWS AMIs to delete."
+            exit 0
+          fi
+
+          while read -r image_id; do
+            if [ "${DRY_RUN}" = "true" ]; then
+              echo "Would delete AWS AMI: ${image_id}"
+            else
+              echo "Deleting AWS AMI: ${image_id}"
+              snapshot_ids="$(aws ec2 describe-images --image-ids "${image_id}" --query 'Images[].BlockDeviceMappings[].Ebs.SnapshotId' --output text)"
+              aws ec2 deregister-image --image-id "${image_id}"
+              for snapshot_id in ${snapshot_ids}; do
+                echo "Deleting AWS snapshot: ${snapshot_id}"
+                aws ec2 delete-snapshot --snapshot-id "${snapshot_id}"
+              done
+            fi
+          done <<< "${image_ids}"
+
+  cleanup-gcp:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: cleanup-gcp-image
+      cancel-in-progress: false
+    env:
+      CLOUDSDK_CORE_PROJECT: ${{ vars.GCP_PROJECT_ID }}
+    steps:
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+      - name: Keep only the newest image, delete the rest
+        env:
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        run: |
+          set -euo pipefail
+
+          image_names="$(gcloud compute images list \
+            --filter="family=quic-perf-runner" \
+            --sort-by="~creationTimestamp" \
+            --format="value(name)" \
+            | tail -n +2 \
+            | sed '/^$/d')"
+
+          if [ -z "${image_names}" ]; then
+            echo "No old GCP images to delete."
+            exit 0
+          fi
+
+          while read -r image_name; do
+            if [ "${DRY_RUN}" = "true" ]; then
+              echo "Would delete GCP image: ${image_name}"
+            else
+              echo "Deleting GCP image: ${image_name}"
+              gcloud compute images delete "${image_name}" --quiet
+            fi
+          done <<< "${image_names}"
