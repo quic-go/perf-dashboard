@@ -34,7 +34,14 @@ jobs:
             --filters "Name=tag:ManagedBy,Values=packer" "Name=tag:Name,Values=quic-perf-runner" \
             --query 'sort_by(Images, &CreationDate)[:-1].ImageId' \
             --output text \
-            | xargs -r -n1 sh -c 'if [ "${DRY_RUN}" = "true" ]; then echo "Would delete AWS AMI: $1"; else echo "Deleting AWS AMI: $1"; aws ec2 deregister-image --delete-associated-snapshots --image-id "$1"; fi' sh
+            | while read -r image_id; do
+              if [ "${DRY_RUN}" = "true" ]; then
+                echo "Would delete AWS AMI: ${image_id}"
+              else
+                echo "Deleting AWS AMI: ${image_id}"
+                aws ec2 deregister-image --delete-associated-snapshots --image-id "${image_id}"
+              fi
+            done
 
   cleanup-gcp:
     runs-on: ubuntu-latest
@@ -55,4 +62,11 @@ jobs:
             --sort-by="~creationTimestamp" \
             --format="value(name)" \
             | tail -n +2 \
-            | xargs -r -n1 sh -c 'if [ "${DRY_RUN}" = "true" ]; then echo "Would delete GCP image: $1"; else echo "Deleting GCP image: $1"; gcloud compute images delete "$1" --quiet; fi' sh
+            | while read -r image_name; do
+              if [ "${DRY_RUN}" = "true" ]; then
+                echo "Would delete GCP image: ${image_name}"
+              else
+                echo "Deleting GCP image: ${image_name}"
+                gcloud compute images delete "${image_name}" --quiet
+              fi
+            done
