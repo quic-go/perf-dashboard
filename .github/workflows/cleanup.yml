@@ -23,9 +23,8 @@ jobs:
       - name: Configure AWS
         uses: aws-actions/configure-aws-credentials@d979d5b3a71173a29b74b5b88418bfda9437d885 # v6.1.1
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-west-2
+          role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
       - name: Keep only the newest AMI, delete the rest
         env:
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
