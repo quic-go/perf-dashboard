@@ -67,6 +67,8 @@ source "googlecompute" "ubuntu" {
   ssh_username = "packer"
   communicator = "ssh"
 
+  disable_default_service_account = true
+
   tags = ["packer"]
 }
 
