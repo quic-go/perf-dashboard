@@ -11,7 +11,7 @@ aws iam create-open-id-connect-provider \
 
 aws iam create-role \
   --role-name "${ROLE_NAME}" \
-  --assume-role-policy-document aws-github-actions-trust-policy.json
+  --assume-role-policy-document "file://${SCRIPT_DIR}/aws-github-actions-trust-policy.json"
 
 aws iam attach-role-policy \
   --role-name "${ROLE_NAME}" \
