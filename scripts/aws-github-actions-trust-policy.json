@@ -23,8 +23,7 @@
       "Condition": {
         "StringEquals": {
           "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-          "token.actions.githubusercontent.com:sub": "repo:quic-go/perf-dashboard:pull_request",
-          "token.actions.githubusercontent.com:actor": "marten-seemann"
+          "token.actions.githubusercontent.com:sub": "repo:quic-go/perf-dashboard:environment:cloud-test"
         }
       }
     }

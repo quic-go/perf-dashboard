@@ -4,7 +4,6 @@ set -euo pipefail
 PROJECT_ID="quic-perf-dashboard"
 PROJECT_NUMBER="956155714051"
 REPO="quic-go/perf-dashboard"
-GITHUB_ACTOR="marten-seemann"
 SERVICE_ACCOUNT="github-packer-builder@${PROJECT_ID}.iam.gserviceaccount.com"
 
 gcloud iam service-accounts create github-packer-builder \
@@ -28,7 +27,7 @@ gcloud iam workload-identity-pools providers create-oidc perf-dashboard \
   --display-name="${REPO}" \
   --issuer-uri="https://token.actions.githubusercontent.com" \
   --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository" \
-  --attribute-condition="assertion.repository == '${REPO}' && (assertion.ref == 'refs/heads/master' || (assertion.event_name == 'pull_request' && assertion.actor == '${GITHUB_ACTOR}'))"
+  --attribute-condition="assertion.repository == '${REPO}' && (assertion.ref == 'refs/heads/master' || assertion.sub == 'repo:${REPO}:environment:cloud-test')"
 
 gcloud iam service-accounts add-iam-policy-binding "${SERVICE_ACCOUNT}" \
   --project="${PROJECT_ID}" \
