@@ -8,6 +8,10 @@ packer {
       version = ">= 1.2.5"
       source  = "github.com/hashicorp/googlecompute"
     }
+    azure = {
+      version = ">= 2.6.1"
+      source  = "github.com/hashicorp/azure"
+    }
   }
 }
 
@@ -20,6 +24,12 @@ variable "go_version" {
 variable "gcp_project_id" {
   type        = string
   description = "GCP project ID"
+  default     = ""
+}
+
+variable "azure_resource_group" {
+  type        = string
+  description = "Azure resource group"
   default     = ""
 }
 
@@ -72,10 +82,33 @@ source "googlecompute" "ubuntu" {
   tags = ["packer"]
 }
 
+source "azure-arm" "ubuntu" {
+  use_azure_cli_auth = true
+
+  build_resource_group_name         = var.azure_resource_group
+  managed_image_resource_group_name = var.azure_resource_group
+  managed_image_name                = "quic-perf-runner-{{timestamp}}"
+
+  os_type         = "Linux"
+  image_publisher = "Canonical"
+  image_offer     = "ubuntu-24_04-lts"
+  image_sku       = "server"
+  image_version   = "latest"
+
+  vm_size         = "Standard_D2s_v5"
+  os_disk_size_gb = 30
+
+  azure_tags = {
+    Name      = "quic-perf-runner"
+    ManagedBy = "packer"
+  }
+}
+
 build {
   sources = [
     "source.amazon-ebs.ubuntu",
     "source.googlecompute.ubuntu",
+    "source.azure-arm.ubuntu",
   ]
 
   provisioner "shell" {
@@ -151,6 +184,15 @@ build {
       "sudo install -o root -g root -m 0644 /tmp/shutdown-check.timer   /etc/systemd/system/shutdown-check.timer",
       "rm /tmp/shutdown-check.sh /tmp/shutdown-check.service /tmp/shutdown-check.timer",
       "sudo systemctl enable shutdown-check.timer",
+    ]
+  }
+
+  provisioner "shell" {
+    only = ["azure-arm.ubuntu"]
+    inline = [
+      "echo '=== Deprovisioning Azure VM ==='",
+      "sudo waagent -force -deprovision+user",
+      "sync",
     ]
   }
 
