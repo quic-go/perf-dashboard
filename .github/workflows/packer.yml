@@ -194,20 +194,14 @@ jobs:
         run: |
           set -euo pipefail
           IMAGE_ID="${{ steps.manifest.outputs.image_id }}"
-          IMAGE_METADATA="$(az image show \
-            --ids "${IMAGE_ID}" \
-            --output json)"
-
-          OS_DISK_ID="$(jq -r '.storageProfile.osDisk.managedDisk.id // empty' <<< "${IMAGE_METADATA}")"
-          if [ -n "${OS_DISK_ID}" ]; then
-            IMAGE_SIZE="$(az disk show \
-              --ids "${OS_DISK_ID}" \
-              --query 'diskSizeBytes' \
-              --output tsv)"
-          else
-            DISK_SIZE_GB="$(jq -r '.storageProfile.osDisk.diskSizeGB' <<< "${IMAGE_METADATA}")"
-            IMAGE_SIZE=$((DISK_SIZE_GB * 1000000000))
-          fi
+          read -r TEMP_DISK_ID IMAGE_SIZE < <(az disk create \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --name "quic-perf-image-size-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --image-reference "${IMAGE_ID}" \
+            --sku Standard_LRS \
+            --query '[id,diskSizeBytes]' \
+            --output tsv)
+          trap 'az disk delete --ids "${TEMP_DISK_ID}" --yes --output none' EXIT
 
           echo "image_size=${IMAGE_SIZE}" >> "${GITHUB_OUTPUT}"
 
