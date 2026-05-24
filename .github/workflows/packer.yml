@@ -6,12 +6,6 @@ on:
   pull_request:
     branches: [ master ]
   workflow_dispatch:
-    inputs:
-      debug:
-        description: Run AWS, GCP, and Azure image builds through the cloud-test environment
-        type: boolean
-        required: false
-        default: false
 
 permissions:
   contents: read
@@ -45,9 +39,9 @@ jobs:
   gcp:
     name: Build GCP image
     needs: validate
-    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.debug)
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    environment: ${{ inputs.debug && 'cloud-test' || null }}
+    environment: ${{ github.event_name == 'workflow_dispatch' && 'cloud-test' || null }}
     outputs:
       image_id: ${{ steps.manifest.outputs.image_id }}
       image_size: ${{ steps.image_size.outputs.image_size }}
@@ -96,9 +90,9 @@ jobs:
   aws:
     name: Build AWS image
     needs: validate
-    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.debug)
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    environment: ${{ inputs.debug && 'cloud-test' || null }}
+    environment: ${{ github.event_name == 'workflow_dispatch' && 'cloud-test' || null }}
     outputs:
       image_id: ${{ steps.manifest.outputs.image_id }}
       image_size: ${{ steps.image_size.outputs.image_size }}
@@ -154,9 +148,9 @@ jobs:
   azure:
     name: Build Azure image
     needs: validate
-    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.debug)
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    environment: ${{ inputs.debug && 'cloud-test' || null }}
+    environment: ${{ github.event_name == 'workflow_dispatch' && 'cloud-test' || null }}
     outputs:
       image_id: ${{ steps.manifest.outputs.image_id }}
     concurrency:
@@ -195,7 +189,7 @@ jobs:
   summary:
     name: Build summary
     needs: [gcp, aws, azure]
-    if: always() && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.debug))
+    if: always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     steps:
       # Azure managed images expose provisioned disk size, not a comparable
