@@ -199,7 +199,7 @@ jobs:
             --ids "${IMAGE_ID}" \
             --query 'storageProfile.osDisk.managedDisk.id' \
             --output tsv)"
-          if [ -n "${OS_DISK_ID}" ] && [ "${OS_DISK_ID}" != "null" ]; then
+          if [ "${OS_DISK_ID}" != "null" ] && [ -n "${OS_DISK_ID}" ]; then
             IMAGE_SIZE="$(az disk show \
               --ids "${OS_DISK_ID}" \
               --query 'diskSizeBytes' \
