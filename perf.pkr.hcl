@@ -8,6 +8,10 @@ packer {
       version = ">= 1.2.5"
       source  = "github.com/hashicorp/googlecompute"
     }
+    azure = {
+      version = ">= 2.6.1"
+      source  = "github.com/hashicorp/azure"
+    }
   }
 }
 
@@ -23,6 +27,16 @@ variable "gcp_project_id" {
   default     = ""
 }
 
+variable "azure_resource_group" {
+  type        = string
+  description = "Azure resource group"
+  default     = ""
+}
+
+locals {
+  image_name = "quic-perf-runner-${formatdate("YYYYMMDDhhmmss", timestamp())}"
+}
+
 source "amazon-ebs" "ubuntu" {
   region = "us-west-2"
 
@@ -36,7 +50,7 @@ source "amazon-ebs" "ubuntu" {
     owners      = ["099720109477"]
   }
 
-  ami_name        = "quic-perf-runner-{{timestamp}}"
+  ami_name        = local.image_name
   ami_description = "QUIC perf runner"
   instance_type   = "c6i.large"
   ssh_username    = "ubuntu"
@@ -59,6 +73,7 @@ source "googlecompute" "ubuntu" {
   zone       = "us-west1-b"
 
   source_image_family = "ubuntu-2404-lts-amd64"
+  image_name          = local.image_name
   image_family        = "quic-perf-runner"
 
   machine_type = "e2-medium"
@@ -72,10 +87,32 @@ source "googlecompute" "ubuntu" {
   tags = ["packer"]
 }
 
+source "azure-arm" "ubuntu" {
+  use_azure_cli_auth = true
+
+  build_resource_group_name         = var.azure_resource_group
+  managed_image_resource_group_name = var.azure_resource_group
+  managed_image_name                = local.image_name
+
+  os_type         = "Linux"
+  image_publisher = "Canonical"
+  image_offer     = "ubuntu-24_04-lts"
+  image_sku       = "server"
+  image_version   = "latest"
+
+  vm_size         = "Standard_D2s_v5"
+  os_disk_size_gb = 30
+
+  azure_tags = {
+    ManagedBy = "packer"
+  }
+}
+
 build {
   sources = [
     "source.amazon-ebs.ubuntu",
     "source.googlecompute.ubuntu",
+    "source.azure-arm.ubuntu",
   ]
 
   provisioner "shell" {
@@ -154,7 +191,19 @@ build {
     ]
   }
 
+  provisioner "shell" {
+    only = ["azure-arm.ubuntu"]
+    inline = [
+      "echo '=== Deprovisioning Azure VM ==='",
+      "sudo waagent -force -deprovision+user",
+      "sync",
+    ]
+  }
+
   post-processor "manifest" {
     output = "packer-manifest.json"
+    custom_data = {
+      image_name = local.image_name
+    }
   }
 }

@@ -8,13 +8,17 @@ on:
   workflow_dispatch:
     inputs:
       debug:
-        description: Run AWS and GCP image builds through the cloud-test environment
+        description: Run AWS, GCP, and Azure image builds through the cloud-test environment
         type: boolean
         required: false
         default: false
 
 permissions:
   contents: read
+
+env:
+  PKR_VAR_gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
+  PKR_VAR_azure_resource_group: ${{ vars.AZURE_RESOURCE_GROUP }}
 
 jobs:
   validate:
@@ -32,8 +36,11 @@ jobs:
       - name: packer validate (AWS)
         run: packer validate -only=amazon-ebs.ubuntu .
       - name: packer validate (GCP)
-        if: ${{ vars.GCP_PROJECT_ID != '' }}
-        run: packer validate -only=googlecompute.ubuntu -var "gcp_project_id=${{ vars.GCP_PROJECT_ID }}" .
+        if: vars.GCP_PROJECT_ID != ''
+        run: packer validate -only=googlecompute.ubuntu .
+      - name: packer validate (Azure)
+        if: vars.AZURE_RESOURCE_GROUP != ''
+        run: packer validate -only=azure-arm.ubuntu .
 
   gcp:
     name: Build GCP image
@@ -64,7 +71,7 @@ jobs:
       - name: packer init
         run: packer init .
       - name: packer build
-        run: packer build -color=false -only=googlecompute.ubuntu -var "gcp_project_id=${{ vars.GCP_PROJECT_ID }}" .
+        run: packer build -color=false -only=googlecompute.ubuntu .
       - name: Read Packer manifest
         id: manifest
         run: |
@@ -131,6 +138,7 @@ jobs:
           set -euo pipefail
           IMAGE_ID="${{ steps.manifest.outputs.image_id }}"
           IMAGE_ID="${IMAGE_ID##*:}"
+          # shellcheck disable=SC2016
           SNAPSHOT_ID=$(aws ec2 describe-images \
             --image-ids "${IMAGE_ID}" \
             --query 'Images[0].BlockDeviceMappings[?DeviceName==`/dev/sda1`].Ebs.SnapshotId' \
@@ -143,12 +151,55 @@ jobs:
             --region us-west-2)
           echo "image_size=${IMAGE_SIZE}" >> "${GITHUB_OUTPUT}"
 
+  azure:
+    name: Build Azure image
+    needs: validate
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.debug)
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.debug && 'cloud-test' || null }}
+    outputs:
+      image_id: ${{ steps.manifest.outputs.image_id }}
+    concurrency:
+      group: packer-azure-image
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+      - name: Authenticate to Azure
+        uses: azure/login@532459ea530d8321f2fb9bb10d1e0bcf23869a43 # v3.0.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - uses: hashicorp/setup-packer@c3d53c525d422944e50ee27b840746d6522b08de # v3.2.0
+        with:
+          version: "1.15.2"
+      - name: packer init
+        run: packer init .
+      - name: packer build
+        run: packer build -color=false -only=azure-arm.ubuntu .
+      - name: Read Packer manifest
+        id: manifest
+        run: |
+          set -euo pipefail
+          IMAGE_NAME="$(jq -r '.builds[-1].custom_data.image_name // empty' packer-manifest.json)"
+          if [ -z "${IMAGE_NAME}" ]; then
+            echo "Could not find image_name in Packer manifest" >&2
+            jq . packer-manifest.json >&2 || true
+            exit 1
+          fi
+          echo "image_id=${IMAGE_NAME}" >> "${GITHUB_OUTPUT}"
+
   summary:
     name: Build summary
-    needs: [gcp, aws]
+    needs: [gcp, aws, azure]
     if: always() && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.debug))
     runs-on: ubuntu-latest
     steps:
+      # Azure managed images expose provisioned disk size, not a comparable
+      # actual image byte count, so the summary intentionally uses a placeholder.
       - name: Write build summary
         run: |
           set -euo pipefail
@@ -173,4 +224,5 @@ jobs:
           | --- | --- | --- | --- |
           | AWS | ${{ needs.aws.result }} | ${{ needs.aws.outputs.image_id || 'N/A' }} | ${aws_image_size_gb} |
           | GCP | ${{ needs.gcp.result }} | ${{ needs.gcp.outputs.image_id || 'N/A' }} | ${gcp_image_size_gb} |
+          | Azure | ${{ needs.azure.result }} | ${{ needs.azure.outputs.image_id || 'N/A' }} | --- |
           EOF
