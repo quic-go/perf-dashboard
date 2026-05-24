@@ -193,7 +193,7 @@ jobs:
         id: image_size
         run: |
           set -euo pipefail
-          BYTES_PER_GB_DECIMAL=1000000000
+          DECIMAL_BYTES_PER_GB=1000000000
           IMAGE_ID="${{ steps.manifest.outputs.image_id }}"
           OS_DISK_ID="$(az image show \
             --ids "${IMAGE_ID}" \
@@ -206,9 +206,11 @@ jobs:
               --ids "${OS_DISK_ID}" \
               --query 'diskSizeBytes' \
               --output tsv 2>"${DISK_SHOW_ERROR_FILE}" || true)"
-            if [ -z "${IMAGE_SIZE}" ] && [ -s "${DISK_SHOW_ERROR_FILE}" ]; then
+            if [ -z "${IMAGE_SIZE}" ]; then
               echo "Failed to read Azure managed disk size for ${OS_DISK_ID}; falling back to diskSizeGB." >&2
-              cat "${DISK_SHOW_ERROR_FILE}" >&2
+              if [ -s "${DISK_SHOW_ERROR_FILE}" ]; then
+                cat "${DISK_SHOW_ERROR_FILE}" >&2
+              fi
             fi
             rm -f "${DISK_SHOW_ERROR_FILE}"
           fi
@@ -217,7 +219,7 @@ jobs:
               --ids "${IMAGE_ID}" \
               --query 'storageProfile.osDisk.diskSizeGB' \
               --output tsv)"
-            IMAGE_SIZE=$((DISK_SIZE_GB * BYTES_PER_GB_DECIMAL))
+            IMAGE_SIZE=$((DISK_SIZE_GB * DECIMAL_BYTES_PER_GB))
           fi
           echo "image_size=${IMAGE_SIZE}" >> "${GITHUB_OUTPUT}"
 
