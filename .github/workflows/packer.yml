@@ -193,34 +193,22 @@ jobs:
         id: image_size
         run: |
           set -euo pipefail
-          DECIMAL_GB_IN_BYTES=1000000000
           IMAGE_ID="${{ steps.manifest.outputs.image_id }}"
-          OS_DISK_ID="$(az image show \
+          IMAGE_METADATA="$(az image show \
             --ids "${IMAGE_ID}" \
-            --query 'storageProfile.osDisk.managedDisk.id' \
-            --output tsv)"
-          IMAGE_SIZE=""
+            --output json)"
+
+          OS_DISK_ID="$(jq -r '.storageProfile.osDisk.managedDisk.id // empty' <<< "${IMAGE_METADATA}")"
           if [ -n "${OS_DISK_ID}" ]; then
-            DISK_SHOW_ERROR_FILE="$(mktemp)"
             IMAGE_SIZE="$(az disk show \
               --ids "${OS_DISK_ID}" \
               --query 'diskSizeBytes' \
-              --output tsv 2>"${DISK_SHOW_ERROR_FILE}" || true)"
-            if [ -z "${IMAGE_SIZE}" ]; then
-              echo "Failed to read Azure managed disk size for ${OS_DISK_ID}; falling back to provisioned diskSizeGB from image metadata." >&2
-              if [ -s "${DISK_SHOW_ERROR_FILE}" ]; then
-                cat "${DISK_SHOW_ERROR_FILE}" >&2
-              fi
-            fi
-            rm -f "${DISK_SHOW_ERROR_FILE}"
-          fi
-          if [ -z "${IMAGE_SIZE}" ]; then
-            DISK_SIZE_GB="$(az image show \
-              --ids "${IMAGE_ID}" \
-              --query 'storageProfile.osDisk.diskSizeGB' \
               --output tsv)"
-            IMAGE_SIZE=$((DISK_SIZE_GB * DECIMAL_GB_IN_BYTES))
+          else
+            DISK_SIZE_GB="$(jq -r '.storageProfile.osDisk.diskSizeGB' <<< "${IMAGE_METADATA}")"
+            IMAGE_SIZE=$((DISK_SIZE_GB * 1000000000))
           fi
+
           echo "image_size=${IMAGE_SIZE}" >> "${GITHUB_OUTPUT}"
 
   summary:
