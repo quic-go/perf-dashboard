@@ -159,7 +159,6 @@ jobs:
     environment: ${{ inputs.debug && 'cloud-test' || null }}
     outputs:
       image_id: ${{ steps.manifest.outputs.image_id }}
-      image_size: ${{ steps.image_size.outputs.image_size }}
     concurrency:
       group: packer-azure-image
       cancel-in-progress: false
@@ -186,24 +185,12 @@ jobs:
         run: |
           set -euo pipefail
           IMAGE_NAME="$(jq -r '.builds[-1].custom_data.image_name // empty' packer-manifest.json)"
-          OS_DISK_ID="$(jq -r '.builds[-1].artifact_id // empty' packer-manifest.json)"
-          if [ -z "${IMAGE_NAME}" ] || [ -z "${OS_DISK_ID}" ]; then
-            echo "Could not find image_name or artifact_id in Packer manifest" >&2
+          if [ -z "${IMAGE_NAME}" ]; then
+            echo "Could not find image_name in Packer manifest" >&2
             jq . packer-manifest.json >&2 || true
             exit 1
           fi
-          IMAGE_ID="/subscriptions/${{ vars.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${{ vars.AZURE_RESOURCE_GROUP }}/providers/Microsoft.Compute/images/${IMAGE_NAME}"
-          echo "image_id=${IMAGE_ID}" >> "${GITHUB_OUTPUT}"
-          echo "os_disk_id=${OS_DISK_ID}" >> "${GITHUB_OUTPUT}"
-      - name: Determine image size
-        id: image_size
-        run: |
-          set -euo pipefail
-          OS_DISK_ID="${{ steps.manifest.outputs.os_disk_id }}"
-          trap 'az disk delete --ids "${OS_DISK_ID}" --yes --output none' EXIT
-          IMAGE_SIZE="$(az disk show --ids "${OS_DISK_ID}" --query diskSizeBytes --output tsv)"
-
-          echo "image_size=${IMAGE_SIZE}" >> "${GITHUB_OUTPUT}"
+          echo "image_id=${IMAGE_NAME}" >> "${GITHUB_OUTPUT}"
 
   summary:
     name: Build summary
@@ -211,6 +198,8 @@ jobs:
     if: always() && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.debug))
     runs-on: ubuntu-latest
     steps:
+      # Azure managed images expose provisioned disk size, not a comparable
+      # actual image byte count, so the summary intentionally uses a placeholder.
       - name: Write build summary
         run: |
           set -euo pipefail
@@ -225,7 +214,6 @@ jobs:
 
           aws_image_size_gb="$(format_gb "${{ needs.aws.outputs.image_size || '' }}")"
           gcp_image_size_gb="$(format_gb "${{ needs.gcp.outputs.image_size || '' }}")"
-          azure_image_size_gb="$(format_gb "${{ needs.azure.outputs.image_size || '' }}")"
 
           cat >> "${GITHUB_STEP_SUMMARY}" <<'EOF'
           ## Image Build Results
@@ -236,5 +224,5 @@ jobs:
           | --- | --- | --- | --- |
           | AWS | ${{ needs.aws.result }} | ${{ needs.aws.outputs.image_id || 'N/A' }} | ${aws_image_size_gb} |
           | GCP | ${{ needs.gcp.result }} | ${{ needs.gcp.outputs.image_id || 'N/A' }} | ${gcp_image_size_gb} |
-          | Azure | ${{ needs.azure.result }} | ${{ needs.azure.outputs.image_id || 'N/A' }} | ${azure_image_size_gb} |
+          | Azure | ${{ needs.azure.result }} | ${{ needs.azure.outputs.image_id || 'N/A' }} | --- |
           EOF

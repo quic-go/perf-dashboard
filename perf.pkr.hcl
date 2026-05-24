@@ -102,7 +102,6 @@ source "azure-arm" "ubuntu" {
 
   vm_size         = "Standard_D2s_v5"
   os_disk_size_gb = 30
-  keep_os_disk    = true
 
   azure_tags = {
     ManagedBy = "packer"
