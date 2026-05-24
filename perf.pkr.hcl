@@ -33,6 +33,10 @@ variable "azure_resource_group" {
   default     = ""
 }
 
+locals {
+  image_name = "quic-perf-runner-${formatdate("YYYYMMDDhhmmss", timestamp())}"
+}
+
 source "amazon-ebs" "ubuntu" {
   region = "us-west-2"
 
@@ -46,7 +50,7 @@ source "amazon-ebs" "ubuntu" {
     owners      = ["099720109477"]
   }
 
-  ami_name        = "quic-perf-runner-{{timestamp}}"
+  ami_name        = local.image_name
   ami_description = "QUIC perf runner"
   instance_type   = "c6i.large"
   ssh_username    = "ubuntu"
@@ -69,6 +73,7 @@ source "googlecompute" "ubuntu" {
   zone       = "us-west1-b"
 
   source_image_family = "ubuntu-2404-lts-amd64"
+  image_name          = local.image_name
   image_family        = "quic-perf-runner"
 
   machine_type = "e2-medium"
@@ -87,7 +92,7 @@ source "azure-arm" "ubuntu" {
 
   build_resource_group_name         = var.azure_resource_group
   managed_image_resource_group_name = var.azure_resource_group
-  managed_image_name                = "quic-perf-runner-{{timestamp}}"
+  managed_image_name                = local.image_name
 
   os_type         = "Linux"
   image_publisher = "Canonical"
@@ -198,5 +203,8 @@ build {
 
   post-processor "manifest" {
     output = "packer-manifest.json"
+    custom_data = {
+      image_name = local.image_name
+    }
   }
 }
