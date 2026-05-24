@@ -185,18 +185,20 @@ jobs:
         id: manifest
         run: |
           set -euo pipefail
-          artifact_id="$(jq -r '.builds[-1].artifact_id // empty' packer-manifest.json)"
-          if [ -z "${artifact_id}" ]; then
-            echo "Could not find Azure image ID in Packer manifest" >&2
+          IMAGE_ID="$(jq -r '.builds[-1].custom_data.ManagedImageId // empty' packer-manifest.json)"
+          OS_DISK_ID="$(jq -r '.builds[-1].custom_data.OSDiskUri // empty' packer-manifest.json)"
+          if [ -z "${IMAGE_ID}" ] || [ -z "${OS_DISK_ID}" ]; then
+            echo "Could not find Azure ManagedImageId or OSDiskUri in Packer manifest" >&2
+            jq . packer-manifest.json >&2 || true
             exit 1
           fi
-          echo "image_id=${artifact_id}" >> "${GITHUB_OUTPUT}"
+          echo "image_id=${IMAGE_ID}" >> "${GITHUB_OUTPUT}"
+          echo "os_disk_id=${OS_DISK_ID}" >> "${GITHUB_OUTPUT}"
       - name: Determine image size
         id: image_size
         run: |
           set -euo pipefail
-          IMAGE_ID="${{ steps.manifest.outputs.image_id }}"
-          OS_DISK_ID="$(az image show --ids "${IMAGE_ID}" --query 'storageProfile.osDisk.managedDisk.id' --output tsv)"
+          OS_DISK_ID="${{ steps.manifest.outputs.os_disk_id }}"
           trap 'az disk delete --ids "${OS_DISK_ID}" --yes --output none' EXIT
           IMAGE_SIZE="$(az disk show --ids "${OS_DISK_ID}" --query diskSizeBytes --output tsv)"
 
