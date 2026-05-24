@@ -99,7 +99,6 @@ source "azure-arm" "ubuntu" {
   os_disk_size_gb = 30
 
   azure_tags = {
-    Name      = "quic-perf-runner"
     ManagedBy = "packer"
   }
 }
