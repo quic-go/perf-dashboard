@@ -193,7 +193,7 @@ jobs:
         id: image_size
         run: |
           set -euo pipefail
-          BYTES_PER_GB=1000000000
+          BYTES_PER_DECIMAL_GB=1000000000
           IMAGE_ID="${{ steps.manifest.outputs.image_id }}"
           OS_DISK_ID="$(az image show \
             --ids "${IMAGE_ID}" \
@@ -204,14 +204,14 @@ jobs:
             IMAGE_SIZE="$(az disk show \
               --ids "${OS_DISK_ID}" \
               --query 'diskSizeBytes' \
-              --output tsv 2>/dev/null || true)"
+              --output tsv || true)"
           fi
           if [ -z "${IMAGE_SIZE}" ]; then
             DISK_SIZE_GB="$(az image show \
               --ids "${IMAGE_ID}" \
               --query 'storageProfile.osDisk.diskSizeGB' \
               --output tsv)"
-            IMAGE_SIZE=$((DISK_SIZE_GB * BYTES_PER_GB))
+            IMAGE_SIZE=$((DISK_SIZE_GB * BYTES_PER_DECIMAL_GB))
           fi
           echo "image_size=${IMAGE_SIZE}" >> "${GITHUB_OUTPUT}"
 
