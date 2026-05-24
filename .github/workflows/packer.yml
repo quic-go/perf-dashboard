@@ -194,11 +194,22 @@ jobs:
         run: |
           set -euo pipefail
           IMAGE_ID="${{ steps.manifest.outputs.image_id }}"
-          DISK_SIZE_GB="$(az image show \
+          OS_DISK_ID="$(az image show \
             --ids "${IMAGE_ID}" \
-            --query 'storageProfile.osDisk.diskSizeGB' \
+            --query 'storageProfile.osDisk.managedDisk.id' \
             --output tsv)"
-          IMAGE_SIZE=$((DISK_SIZE_GB * 1000000000))
+          if [ -n "${OS_DISK_ID}" ] && [ "${OS_DISK_ID}" != "null" ]; then
+            IMAGE_SIZE="$(az disk show \
+              --ids "${OS_DISK_ID}" \
+              --query 'diskSizeBytes' \
+              --output tsv)"
+          else
+            DISK_SIZE_GB="$(az image show \
+              --ids "${IMAGE_ID}" \
+              --query 'storageProfile.osDisk.diskSizeGB' \
+              --output tsv)"
+            IMAGE_SIZE=$((DISK_SIZE_GB * 1073741824))
+          fi
           echo "image_size=${IMAGE_SIZE}" >> "${GITHUB_OUTPUT}"
 
   summary:
@@ -232,7 +243,5 @@ jobs:
           | --- | --- | --- | --- |
           | AWS | ${{ needs.aws.result }} | ${{ needs.aws.outputs.image_id || 'N/A' }} | ${aws_image_size_gb} |
           | GCP | ${{ needs.gcp.result }} | ${{ needs.gcp.outputs.image_id || 'N/A' }} | ${gcp_image_size_gb} |
-          | Azure | ${{ needs.azure.result }} | ${{ needs.azure.outputs.image_id || 'N/A' }} | ${azure_image_size_gb} (provisioned OS disk) |
-
-          Azure managed images report the provisioned OS disk size here. AWS and GCP report provider-reported stored image size.
+          | Azure | ${{ needs.azure.result }} | ${{ needs.azure.outputs.image_id || 'N/A' }} | ${azure_image_size_gb} |
           EOF
