@@ -103,8 +103,11 @@ source "azure-arm" "ubuntu" {
   vm_size         = "Standard_D2s_v5"
   os_disk_size_gb = 30
 
+  # The cleanup workflow deletes Azure resources that are still marked temporary.
+  # Successful builds retag the final managed image as retained in the GitHub Actions workflow.
   azure_tags = {
-    ManagedBy = "packer"
+    ManagedBy       = "packer"
+    PackerLifecycle = "temporary"
   }
 }
 

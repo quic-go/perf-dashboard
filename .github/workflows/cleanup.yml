@@ -104,7 +104,8 @@ jobs:
     runs-on: ubuntu-latest
     environment: ${{ github.event_name == 'workflow_dispatch' && 'cloud-test' || null }}
     concurrency:
-      group: cleanup-azure-image
+      # Share the Azure build group so cleanup cannot delete resources from an active build.
+      group: packer-azure-image
       cancel-in-progress: false
     steps:
       - name: Authenticate to Azure
@@ -113,6 +114,33 @@ jobs:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Delete temporary Packer resources
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        run: |
+          set -euo pipefail
+
+          resource_ids="$(az resource list \
+            --resource-group "${AZURE_RESOURCE_GROUP}" \
+            --tag PackerLifecycle=temporary \
+            --query "[].id" \
+            --output tsv \
+            | sed '/^$/d')"
+
+          if [ -z "${resource_ids}" ]; then
+            echo "No temporary Azure resources to delete."
+            exit 0
+          fi
+
+          while read -r resource_id; do
+            if [ "${DRY_RUN}" = "true" ]; then
+              echo "Would delete Azure resource: ${resource_id}"
+            else
+              echo "Deleting Azure resource: ${resource_id}"
+              az resource delete --ids "${resource_id}"
+            fi
+          done <<< "${resource_ids}"
       - name: Keep only the newest image, delete the rest
         env:
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
@@ -122,7 +150,7 @@ jobs:
 
           image_ids="$(az image list \
             --resource-group "${AZURE_RESOURCE_GROUP}" \
-            --query "sort_by([?tags.ManagedBy=='packer' && starts_with(name, 'quic-perf-runner-')], &name)[:-1].id" \
+            --query "sort_by([?tags.ManagedBy=='packer' && starts_with(name, 'quic-perf-runner-') && not_null(tags.PackerLifecycle, 'retained')!='temporary'], &name)[:-1].id" \
             --output tsv \
             | sed '/^$/d')"
 

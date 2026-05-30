@@ -185,6 +185,16 @@ jobs:
             exit 1
           fi
           echo "image_id=${IMAGE_NAME}" >> "${GITHUB_OUTPUT}"
+      - name: Mark Azure image as retained
+        env:
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+        run: |
+          az tag update \
+            --resource-id "/subscriptions/${AZURE_SUBSCRIPTION_ID}/resourceGroups/${AZURE_RESOURCE_GROUP}/providers/Microsoft.Compute/images/${{ steps.manifest.outputs.image_id }}" \
+            --operation Merge \
+            --tags PackerLifecycle=retained \
+            --output none
 
   summary:
     name: Build summary
