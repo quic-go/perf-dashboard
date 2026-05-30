@@ -99,3 +99,42 @@ jobs:
               gcloud compute images delete "${image_name}" --quiet
             fi
           done <<< "${image_names}"
+
+  cleanup-azure:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: cleanup-azure-image
+      cancel-in-progress: false
+    steps:
+      - name: Authenticate to Azure
+        uses: azure/login@532459ea530d8321f2fb9bb10d1e0bcf23869a43 # v3.0.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Keep only the newest image, delete the rest
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        run: |
+          set -euo pipefail
+
+          image_ids="$(az image list \
+            --resource-group "${AZURE_RESOURCE_GROUP}" \
+            --query "sort_by([?tags.ManagedBy=='packer'], &name)[:-1].id" \
+            --output tsv \
+            | sed '/^$/d')"
+
+          if [ -z "${image_ids}" ]; then
+            echo "No old Azure images to delete."
+            exit 0
+          fi
+
+          while read -r image_id; do
+            if [ "${DRY_RUN}" = "true" ]; then
+              echo "Would delete Azure image: ${image_id}"
+            else
+              echo "Deleting Azure image: ${image_id}"
+              az image delete --ids "${image_id}"
+            fi
+          done <<< "${image_ids}"
