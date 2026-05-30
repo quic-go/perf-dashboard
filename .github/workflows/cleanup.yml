@@ -121,7 +121,7 @@ jobs:
 
           image_ids="$(az image list \
             --resource-group "${AZURE_RESOURCE_GROUP}" \
-            --query "sort_by([?tags.ManagedBy=='packer'], &name)[:-1].id" \
+            --query "sort_by([?tags.ManagedBy=='packer' && starts_with(name, 'quic-perf-runner-')], &name)[:-1].id" \
             --output tsv \
             | sed '/^$/d')"
 
