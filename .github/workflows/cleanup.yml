@@ -102,6 +102,7 @@ jobs:
 
   cleanup-azure:
     runs-on: ubuntu-latest
+    environment: ${{ github.event_name == 'workflow_dispatch' && 'cloud-test' || null }}
     concurrency:
       group: cleanup-azure-image
       cancel-in-progress: false
