@@ -16,6 +16,7 @@ permissions:
 jobs:
   cleanup-aws:
     runs-on: ubuntu-latest
+    environment: ${{ github.event_name == 'workflow_dispatch' && 'cloud-test' || null }}
     concurrency:
       group: cleanup-aws-image
       cancel-in-progress: false
@@ -60,6 +61,7 @@ jobs:
 
   cleanup-gcp:
     runs-on: ubuntu-latest
+    environment: ${{ github.event_name == 'workflow_dispatch' && 'cloud-test' || null }}
     concurrency:
       group: cleanup-gcp-image
       cancel-in-progress: false
