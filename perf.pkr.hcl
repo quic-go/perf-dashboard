@@ -103,8 +103,12 @@ source "azure-arm" "ubuntu" {
   vm_size         = "Standard_D2s_v5"
   os_disk_size_gb = 30
 
-  # The cleanup workflow deletes Azure resources that are still marked temporary.
-  # Successful builds retag the final managed image as retained in the GitHub Actions workflow.
+  # This lifecycle tag is Azure-only on purpose. AWS and GCP use Packer's normal
+  # temporary resource cleanup, and our cleanup workflow only prunes their final
+  # images. Azure builds run in our existing resource group because the service
+  # principal is scoped there; if Packer or CI dies before Packer can clean up,
+  # resources can be left behind. The workflow retags the final managed image as
+  # retained after a successful build and deletes temporary leftovers later.
   azure_tags = {
     ManagedBy       = "packer"
     PackerLifecycle = "temporary"
