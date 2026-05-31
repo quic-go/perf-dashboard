@@ -33,6 +33,22 @@ variable "azure_resource_group" {
   default     = ""
 }
 
+variable "ssh_public_key_primary" {
+  type        = string
+  description = "SSH public key required for CI access to runner images"
+
+  validation {
+    condition     = var.ssh_public_key_primary != ""
+    error_message = "Primary SSH public key must be set."
+  }
+}
+
+variable "ssh_public_keys_additional" {
+  type        = list(string)
+  description = "Additional SSH public keys authorized for debugging runner images"
+  default     = []
+}
+
 locals {
   image_name = "quic-perf-runner-${formatdate("YYYYMMDDhhmmss", timestamp())}"
 }
@@ -127,6 +143,21 @@ build {
     inline = [
       "echo '=== Updating package list and installing base packages ==='",
       "sudo apt-get update && sudo apt-get install -y ca-certificates curl git",
+    ]
+  }
+
+  provisioner "shell" {
+    environment_vars = [
+      "AUTHORIZED_SSH_PUBLIC_KEYS=${join("\n", concat([var.ssh_public_key_primary], var.ssh_public_keys_additional))}",
+    ]
+    inline = [
+      "set -eux",
+      "echo '=== Creating perf SSH user ==='",
+      "sudo useradd --create-home --shell /bin/bash perf",
+      "sudo install -d -o perf -g perf -m 0700 /home/perf/.ssh",
+      "printf '%s\n' \"$${AUTHORIZED_SSH_PUBLIC_KEYS}\" | sudo tee /home/perf/.ssh/authorized_keys >/dev/null",
+      "sudo chown perf:perf /home/perf/.ssh/authorized_keys",
+      "sudo chmod 0600 /home/perf/.ssh/authorized_keys",
     ]
   }
 
