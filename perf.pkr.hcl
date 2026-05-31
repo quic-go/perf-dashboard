@@ -33,6 +33,12 @@ variable "azure_resource_group" {
   default     = ""
 }
 
+variable "authorized_ssh_public_keys" {
+  type        = list(string)
+  description = "SSH public keys authorized for the perf user on runner images"
+  default     = []
+}
+
 locals {
   image_name = "quic-perf-runner-${formatdate("YYYYMMDDhhmmss", timestamp())}"
 }
@@ -127,6 +133,21 @@ build {
     inline = [
       "echo '=== Updating package list and installing base packages ==='",
       "sudo apt-get update && sudo apt-get install -y ca-certificates curl git",
+    ]
+  }
+
+  # Add SSH public keys
+  provisioner "shell" {
+    environment_vars = ["AUTHORIZED_SSH_PUBLIC_KEYS=${join("\n", var.authorized_ssh_public_keys)}"]
+    inline = [
+      "set -eux",
+      "if [ -z \"$${AUTHORIZED_SSH_PUBLIC_KEYS}\" ]; then echo 'authorized_ssh_public_keys must contain at least one key'; exit 1; fi",
+      "echo '=== Creating perf SSH user ==='",
+      "sudo useradd --create-home --shell /bin/bash perf",
+      "sudo install -d -o perf -g perf -m 0700 /home/perf/.ssh",
+      "printf '%s\n' \"$${AUTHORIZED_SSH_PUBLIC_KEYS}\" | sudo tee /home/perf/.ssh/authorized_keys >/dev/null",
+      "sudo chown perf:perf /home/perf/.ssh/authorized_keys",
+      "sudo chmod 0600 /home/perf/.ssh/authorized_keys",
     ]
   }
 
