@@ -33,9 +33,19 @@ variable "azure_resource_group" {
   default     = ""
 }
 
-variable "authorized_ssh_public_keys" {
+variable "ssh_public_key_primary" {
+  type        = string
+  description = "SSH public key required for CI access to runner images"
+
+  validation {
+    condition     = var.ssh_public_key_primary != ""
+    error_message = "Primary SSH public key must be set."
+  }
+}
+
+variable "ssh_public_keys_additional" {
   type        = list(string)
-  description = "SSH public keys authorized for the perf user on runner images"
+  description = "Additional SSH public keys authorized for debugging runner images"
   default     = []
 }
 
@@ -136,12 +146,12 @@ build {
     ]
   }
 
-  # Add SSH public keys
   provisioner "shell" {
-    environment_vars = ["AUTHORIZED_SSH_PUBLIC_KEYS=${join("\n", var.authorized_ssh_public_keys)}"]
+    environment_vars = [
+      "AUTHORIZED_SSH_PUBLIC_KEYS=${join("\n", concat([var.ssh_public_key_primary], var.ssh_public_keys_additional))}",
+    ]
     inline = [
       "set -eux",
-      "if [ -z \"$${AUTHORIZED_SSH_PUBLIC_KEYS}\" ]; then echo 'authorized_ssh_public_keys must contain at least one key'; exit 1; fi",
       "echo '=== Creating perf SSH user ==='",
       "sudo useradd --create-home --shell /bin/bash perf",
       "sudo install -d -o perf -g perf -m 0700 /home/perf/.ssh",

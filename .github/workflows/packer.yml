@@ -13,7 +13,8 @@ permissions:
 env:
   PKR_VAR_gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
   PKR_VAR_azure_resource_group: ${{ vars.AZURE_RESOURCE_GROUP }}
-  PKR_VAR_authorized_ssh_public_keys: ${{ vars.AUTHORIZED_SSH_PUBLIC_KEYS }}
+  PKR_VAR_ssh_public_key_primary: ${{ vars.SSH_PUBLIC_KEY_PRIMARY }}
+  PKR_VAR_ssh_public_keys_additional: ${{ vars.SSH_PUBLIC_KEYS_ADDITIONAL || '[]' }}
 
 jobs:
   validate:
