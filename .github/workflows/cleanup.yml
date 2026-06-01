@@ -123,8 +123,7 @@ jobs:
 
           resource_ids="$(az resource list \
             --resource-group "${AZURE_RESOURCE_GROUP}" \
-            --tag PackerLifecycle=temporary \
-            --query "[?tags.ManagedBy=='packer'].id" \
+            --query "[?tags.ManagedBy=='packer' && tags.PackerLifecycle=='temporary'].id" \
             --output tsv \
             | sed '/^$/d')"
 
