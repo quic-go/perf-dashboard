@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: ${{ github.event_name == 'workflow_dispatch' && 'cloud-test' || null }}
     concurrency:
-      group: cleanup-aws-image
+      group: cloud-aws
       cancel-in-progress: false
     steps:
       - name: Configure AWS
@@ -63,7 +63,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: ${{ github.event_name == 'workflow_dispatch' && 'cloud-test' || null }}
     concurrency:
-      group: cleanup-gcp-image
+      group: cloud-gcp
       cancel-in-progress: false
     env:
       CLOUDSDK_CORE_PROJECT: ${{ vars.GCP_PROJECT_ID }}
@@ -104,8 +104,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: ${{ github.event_name == 'workflow_dispatch' && 'cloud-test' || null }}
     concurrency:
-      # Share the Azure build group so cleanup cannot delete resources from an active build.
-      group: packer-azure-image
+      group: cloud-azure
       cancel-in-progress: false
     steps:
       - name: Authenticate to Azure
