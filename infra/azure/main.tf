@@ -20,6 +20,10 @@ locals {
   needs_image_copy   = var.location != local.source_location
   gallery_name       = "quicperfrunner${substr(md5(var.name), 0, 12)}"
   vm_source_image_id = local.needs_image_copy ? azurerm_shared_image_version.runner[0].id : local.source_image_id
+  benchmark_tags = {
+    ManagedBy = "perf-dashboard"
+    RunId     = var.name
+  }
 }
 
 resource "azurerm_shared_image_gallery" "runner" {
@@ -28,10 +32,7 @@ resource "azurerm_shared_image_gallery" "runner" {
   resource_group_name = var.azure_resource_group
   location            = local.source_location
 
-  tags = {
-    ManagedBy = "perf-dashboard"
-    RunId     = var.name
-  }
+  tags = local.benchmark_tags
 }
 
 resource "azurerm_shared_image" "runner" {
@@ -49,10 +50,7 @@ resource "azurerm_shared_image" "runner" {
     sku       = "runner"
   }
 
-  tags = {
-    ManagedBy = "perf-dashboard"
-    RunId     = var.name
-  }
+  tags = local.benchmark_tags
 }
 
 resource "azurerm_shared_image_version" "runner" {
@@ -82,10 +80,7 @@ resource "azurerm_shared_image_version" "runner" {
     }
   }
 
-  tags = {
-    ManagedBy = "perf-dashboard"
-    RunId     = var.name
-  }
+  tags = local.benchmark_tags
 
   timeouts {
     create = "2h"
@@ -99,10 +94,7 @@ resource "azurerm_virtual_network" "node" {
   location            = var.location
   resource_group_name = var.azure_resource_group
 
-  tags = {
-    ManagedBy = "perf-dashboard"
-    RunId     = var.name
-  }
+  tags = local.benchmark_tags
 }
 
 resource "azurerm_subnet" "node" {
@@ -119,10 +111,7 @@ resource "azurerm_public_ip" "node" {
   allocation_method   = "Static"
   sku                 = "Standard"
 
-  tags = {
-    ManagedBy = "perf-dashboard"
-    RunId     = var.name
-  }
+  tags = local.benchmark_tags
 }
 
 resource "azurerm_network_interface" "node" {
@@ -137,10 +126,7 @@ resource "azurerm_network_interface" "node" {
     public_ip_address_id          = azurerm_public_ip.node.id
   }
 
-  tags = {
-    ManagedBy = "perf-dashboard"
-    RunId     = var.name
-  }
+  tags = local.benchmark_tags
 }
 
 resource "azurerm_network_security_group" "node" {
@@ -160,10 +146,7 @@ resource "azurerm_network_security_group" "node" {
     destination_address_prefix = "*"
   }
 
-  tags = {
-    ManagedBy = "perf-dashboard"
-    RunId     = var.name
-  }
+  tags = local.benchmark_tags
 }
 
 resource "azurerm_network_interface_security_group_association" "node" {
@@ -187,14 +170,12 @@ resource "azurerm_linux_virtual_machine" "node" {
   }
 
   os_disk {
+    name                 = "${var.name}-osdisk"
     caching              = "ReadWrite"
     storage_account_type = "Standard_LRS"
   }
 
-  tags = {
-    ManagedBy = "perf-dashboard"
-    RunId     = var.name
-  }
+  tags = local.benchmark_tags
 
   depends_on = [azurerm_network_interface_security_group_association.node]
 }

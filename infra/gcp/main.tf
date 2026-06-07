@@ -4,6 +4,11 @@ resource "google_compute_instance" "node" {
   zone         = var.location
   tags         = ["quic-perf-runner"]
 
+  labels = {
+    managed_by = "perf-dashboard"
+    run_id     = var.name
+  }
+
   boot_disk {
     auto_delete = true
 
