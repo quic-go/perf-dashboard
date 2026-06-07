@@ -7,12 +7,16 @@ data "azurerm_images" "runner" {
   }
 }
 
+data "azurerm_image" "runner" {
+  name                = local.source_image_name
+  resource_group_name = var.azure_resource_group
+}
+
 locals {
   image_names        = sort([for image in data.azurerm_images.runner.images : image.name if startswith(image.name, "quic-perf-runner-")])
   source_image_name  = local.image_names[length(local.image_names) - 1]
-  source_images      = [for image in data.azurerm_images.runner.images : image if image.name == local.source_image_name]
-  source_location    = local.source_images[0].location
-  source_image_id    = local.source_images[0].id
+  source_location    = data.azurerm_image.runner.location
+  source_image_id    = data.azurerm_image.runner.id
   needs_image_copy   = var.location != local.source_location
   gallery_name       = "quicperfrunner${substr(md5(var.name), 0, 12)}"
   vm_source_image_id = local.needs_image_copy ? azurerm_shared_image_version.runner[0].id : local.source_image_id
