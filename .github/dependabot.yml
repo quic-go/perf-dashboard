@@ -4,3 +4,10 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+  - package-ecosystem: "terraform"
+    directories:
+      - "/infra/aws"
+      - "/infra/gcp"
+      - "/infra/azure"
+    schedule:
+      interval: "weekly"
