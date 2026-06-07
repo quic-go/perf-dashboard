@@ -48,7 +48,7 @@ jobs:
       image_id: ${{ steps.manifest.outputs.image_id }}
       image_size: ${{ steps.image_size.outputs.image_size }}
     concurrency:
-      group: packer-gcp-image
+      group: cloud-gcp
       cancel-in-progress: false
     permissions:
       contents: read
@@ -99,7 +99,7 @@ jobs:
       image_id: ${{ steps.manifest.outputs.image_id }}
       image_size: ${{ steps.image_size.outputs.image_size }}
     concurrency:
-      group: packer-aws-image
+      group: cloud-aws
       cancel-in-progress: false
     permissions:
       contents: read
@@ -156,7 +156,7 @@ jobs:
     outputs:
       image_id: ${{ steps.manifest.outputs.image_id }}
     concurrency:
-      group: packer-azure-image
+      group: cloud-azure
       cancel-in-progress: false
     permissions:
       contents: read

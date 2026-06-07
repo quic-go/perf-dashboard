@@ -1,0 +1,79 @@
+name: Run benchmark
+
+on:
+  workflow_dispatch:
+    inputs:
+      cloud_provider:
+        required: true
+        type: choice
+        options: [aws, gcp, azure]
+      location:
+        required: true
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  run:
+    name: Smoke ${{ inputs.cloud_provider }} ${{ inputs.location }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: ${{ format('cloud-{0}', inputs.cloud_provider) }}
+      cancel-in-progress: false
+    env:
+      TF_IN_AUTOMATION: true
+      TF_VAR_name: quic-perf-${{ inputs.cloud_provider }}-${{ github.run_id }}-${{ github.run_attempt }}
+      TF_VAR_location: ${{ inputs.location }}
+      TF_VAR_gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
+      TF_VAR_azure_subscription_id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      TF_VAR_azure_resource_group: ${{ vars.AZURE_RESOURCE_GROUP }}
+      TF_VAR_ssh_public_key: ${{ vars.SSH_PUBLIC_KEY_PRIMARY }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Configure AWS credentials
+        if: inputs.cloud_provider == 'aws'
+        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b # v6.2.0
+        with:
+          aws-region: us-west-2
+          role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
+
+      - name: Authenticate to GCP
+        if: inputs.cloud_provider == 'gcp'
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_PACKER_SERVICE_ACCOUNT }}
+
+      - name: Authenticate to Azure
+        if: inputs.cloud_provider == 'azure'
+        uses: azure/login@532459ea530d8321f2fb9bb10d1e0bcf23869a43 # v3.0.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Read Terraform version
+        id: terraform-version
+        run: echo "version=$(cat .terraform-version)" >> "${GITHUB_OUTPUT}"
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ steps.terraform-version.outputs.version }}
+          terraform_wrapper: false
+
+      - name: Terraform init
+        id: init
+        run: terraform -chdir=infra/${{ inputs.cloud_provider }} init -input=false
+
+      - name: Create node
+        run: terraform -chdir=infra/${{ inputs.cloud_provider }} apply -input=false -auto-approve
+
+      - name: Keep node alive for 10 minutes
+        run: sleep 600
+
+      - name: Destroy node
+        if: always() && steps.init.outcome == 'success'
+        run: terraform -chdir=infra/${{ inputs.cloud_provider }} destroy -input=false -auto-approve
