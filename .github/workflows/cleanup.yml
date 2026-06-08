@@ -26,43 +26,52 @@ jobs:
         with:
           aws-region: us-west-2
           role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
-      - name: Keep only the newest AMI, delete the rest
+      - name: Delete old and abandoned resources
         env:
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
         run: |
           set -euo pipefail
 
-          image_ids="$(aws ec2 describe-images \
+          delete_aws_images() {
+            region="$1"
+            description="$2"
+            image_ids="$3"
+
+            if [ -z "${image_ids}" ]; then
+              echo "No ${description} to delete in ${region}."
+              return
+            fi
+
+            while read -r image_id; do
+              if [ "${DRY_RUN}" = "true" ]; then
+                echo "Would delete ${description} in ${region}: ${image_id}"
+                continue
+              fi
+
+              echo "Deleting ${description} in ${region}: ${image_id}"
+              mapfile -t snapshot_ids < <(aws ec2 describe-images \
+                --region "${region}" \
+                --image-ids "${image_id}" \
+                --query 'Images[].BlockDeviceMappings[].Ebs.SnapshotId' \
+                --output text \
+                | tr '\t' '\n' \
+                | sed '/^$/d')
+              aws ec2 deregister-image --region "${region}" --image-id "${image_id}"
+              for snapshot_id in "${snapshot_ids[@]}"; do
+                echo "Deleting AWS snapshot in ${region}: ${snapshot_id}"
+                aws ec2 delete-snapshot --region "${region}" --snapshot-id "${snapshot_id}"
+              done
+            done <<< "${image_ids}"
+          }
+
+          delete_aws_images "us-west-2" "old AWS AMIs" "$(aws ec2 describe-images \
+            --region us-west-2 \
             --owners self \
             --filters "Name=tag:ManagedBy,Values=packer" "Name=tag:Name,Values=quic-perf-runner" \
             --query 'sort_by(Images, &CreationDate)[:-1].ImageId' \
             --output text \
             | tr '\t' '\n' \
             | sed '/^$/d')"
-
-          if [ -z "${image_ids}" ]; then
-            echo "No old AWS AMIs to delete."
-            exit 0
-          fi
-
-          while read -r image_id; do
-            if [ "${DRY_RUN}" = "true" ]; then
-              echo "Would delete AWS AMI: ${image_id}"
-            else
-              echo "Deleting AWS AMI: ${image_id}"
-              snapshot_ids="$(aws ec2 describe-images --image-ids "${image_id}" --query 'Images[].BlockDeviceMappings[].Ebs.SnapshotId' --output text)"
-              aws ec2 deregister-image --image-id "${image_id}"
-              for snapshot_id in ${snapshot_ids}; do
-                echo "Deleting AWS snapshot: ${snapshot_id}"
-                aws ec2 delete-snapshot --snapshot-id "${snapshot_id}"
-              done
-            fi
-          done <<< "${image_ids}"
-      - name: Delete abandoned benchmark resources
-        env:
-          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
-        run: |
-          set -euo pipefail
 
           for region in $(aws ec2 describe-regions --query 'Regions[].RegionName' --output text); do
             mapfile -t instance_ids < <(aws ec2 describe-instances \
@@ -99,32 +108,12 @@ jobs:
               fi
             done
 
-            mapfile -t image_ids < <(aws ec2 describe-images \
+            delete_aws_images "${region}" "AWS benchmark AMI copies" "$(aws ec2 describe-images \
               --region "${region}" \
               --owners self \
               --filters "Name=tag:ManagedBy,Values=perf-dashboard" "Name=tag:Name,Values=quic-perf-runner" \
               --output json \
-              | jq -r '.Images[] | select(any(.Tags[]?; .Key == "RunId" and (.Value | startswith("quic-perf-aws-")))) | .ImageId')
-
-            for image_id in "${image_ids[@]}"; do
-              if [ "${DRY_RUN}" = "true" ]; then
-                echo "Would delete AWS benchmark AMI copy in ${region}: ${image_id}"
-              else
-                echo "Deleting AWS benchmark AMI copy in ${region}: ${image_id}"
-                mapfile -t snapshot_ids < <(aws ec2 describe-images \
-                  --region "${region}" \
-                  --image-ids "${image_id}" \
-                  --query 'Images[].BlockDeviceMappings[].Ebs.SnapshotId' \
-                  --output text \
-                  | tr '\t' '\n' \
-                  | sed '/^$/d')
-                aws ec2 deregister-image --region "${region}" --image-id "${image_id}"
-                for snapshot_id in "${snapshot_ids[@]}"; do
-                  echo "Deleting AWS benchmark snapshot in ${region}: ${snapshot_id}"
-                  aws ec2 delete-snapshot --region "${region}" --snapshot-id "${snapshot_id}"
-                done
-              fi
-            done
+              | jq -r '.Images[] | select(any(.Tags[]?; .Key == "RunId" and (.Value | startswith("quic-perf-aws-")))) | .ImageId')"
           done
 
   cleanup-gcp:
@@ -205,81 +194,54 @@ jobs:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-      - name: Delete temporary Packer resources
+      - name: Delete old, temporary, and abandoned resources
         env:
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
         run: |
           set -euo pipefail
 
-          az resource list \
-            --resource-group "${AZURE_RESOURCE_GROUP}" \
-            --query "[?tags.ManagedBy=='packer' && tags.PackerLifecycle=='temporary'].id" \
-            --output tsv |
-          while read -r resource_id; do
-            if [ "${DRY_RUN}" = "true" ]; then
-              echo "Would delete Azure resource: ${resource_id}"
-            else
-              echo "Deleting Azure resource: ${resource_id}"
-              az resource delete --ids "${resource_id}"
-            fi
-          done
-      - name: Delete abandoned benchmark resources
-        env:
-          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
-          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
-        run: |
-          set -euo pipefail
+          delete_resources() {
+            description="$1"
+            resource_ids="$2"
 
-          delete_resource() {
-            resource_id="$1"
-            if [ -z "${resource_id}" ]; then
+            if [ -z "${resource_ids}" ]; then
+              echo "No ${description} to delete."
               return
             fi
 
-            if [ "${DRY_RUN}" = "true" ]; then
-              echo "Would delete Azure resource: ${resource_id}"
-            else
-              echo "Deleting Azure resource: ${resource_id}"
-              az resource delete --ids "${resource_id}"
-            fi
+            while read -r resource_id; do
+              if [ "${DRY_RUN}" = "true" ]; then
+                echo "Would delete ${description}: ${resource_id}"
+              else
+                echo "Deleting ${description}: ${resource_id}"
+                az resource delete --ids "${resource_id}"
+              fi
+            done <<< "${resource_ids}"
           }
 
-          az resource list \
+          delete_resources "Azure temporary Packer resources" "$(az resource list \
             --resource-group "${AZURE_RESOURCE_GROUP}" \
-            --resource-type Microsoft.Compute/virtualMachines \
-            --query "[?tags.ManagedBy=='perf-dashboard'].[id,tags.RunId]" \
-            --output tsv |
-          while read -r resource_id run_id; do
-            case "${run_id}" in
-              quic-perf-azure-*) ;;
-              *) continue ;;
-            esac
+            --query "[?tags.ManagedBy=='packer' && tags.PackerLifecycle=='temporary'].id" \
+            --output tsv)"
 
-            disk_id="$(az vm show --ids "${resource_id}" --query "storageProfile.osDisk.managedDisk.id" --output tsv 2>/dev/null || true)"
-
-            delete_resource "${resource_id}"
-            delete_resource "${disk_id}"
-          done
-
-          az resource list \
+          delete_resources "old Azure images" "$(az image list \
             --resource-group "${AZURE_RESOURCE_GROUP}" \
-            --resource-type Microsoft.Compute/disks \
-            --query "[].[id,name,tags.RunId]" \
-            --output tsv |
-          while read -r resource_id resource_name run_id; do
-            case "${run_id}" in
-              quic-perf-azure-*) ;;
-              *)
-                case "${resource_name}" in
-                  quic-perf-azure-*) ;;
-                  *) continue ;;
-                esac
-                ;;
-            esac
+            --query "sort_by([?tags.ManagedBy=='packer' && starts_with(name, 'quic-perf-runner-') && not_null(tags.PackerLifecycle, 'retained')!='temporary'], &name)[:-1].id" \
+            --output tsv)"
 
-            delete_resource "${resource_id}"
-          done
+          vm_resources="$(az vm list \
+            --resource-group "${AZURE_RESOURCE_GROUP}" \
+            --query "[?tags.ManagedBy=='perf-dashboard' && starts_with(not_null(tags.RunId, ''), 'quic-perf-azure-')].[id,storageProfile.osDisk.managedDisk.id]" \
+            --output tsv)"
+
+          delete_resources "Azure benchmark VMs" "$(printf '%s\n' "${vm_resources}" | cut -f1 | sed '/^$/d')"
+          delete_resources "Azure benchmark VM disks" "$(printf '%s\n' "${vm_resources}" | cut -f2 | sed '/^$/d')"
+
+          delete_resources "Azure benchmark orphan disks" "$(az disk list \
+            --resource-group "${AZURE_RESOURCE_GROUP}" \
+            --query "[?starts_with(not_null(tags.RunId, ''), 'quic-perf-azure-') || starts_with(name, 'quic-perf-azure-')].id" \
+            --output tsv)"
 
           for resource_type in \
             Microsoft.Network/networkInterfaces \
@@ -289,43 +251,9 @@ jobs:
             Microsoft.Compute/galleries/images/versions \
             Microsoft.Compute/galleries/images \
             Microsoft.Compute/galleries; do
-            az resource list \
+            delete_resources "Azure ${resource_type}" "$(az resource list \
               --resource-group "${AZURE_RESOURCE_GROUP}" \
               --resource-type "${resource_type}" \
-              --query "[?tags.ManagedBy=='perf-dashboard'].[id,tags.RunId]" \
-              --output tsv |
-            while read -r resource_id run_id; do
-              case "${run_id}" in
-                quic-perf-azure-*) ;;
-                *) continue ;;
-              esac
-
-              delete_resource "${resource_id}"
-            done
+              --query "[?tags.ManagedBy=='perf-dashboard' && starts_with(not_null(tags.RunId, ''), 'quic-perf-azure-')].id" \
+              --output tsv)"
           done
-      - name: Keep only the newest image, delete the rest
-        env:
-          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
-          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
-        run: |
-          set -euo pipefail
-
-          image_ids="$(az image list \
-            --resource-group "${AZURE_RESOURCE_GROUP}" \
-            --query "sort_by([?tags.ManagedBy=='packer' && starts_with(name, 'quic-perf-runner-') && not_null(tags.PackerLifecycle, 'retained')!='temporary'], &name)[:-1].id" \
-            --output tsv \
-            | sed '/^$/d')"
-
-          if [ -z "${image_ids}" ]; then
-            echo "No old Azure images to delete."
-            exit 0
-          fi
-
-          while read -r image_id; do
-            if [ "${DRY_RUN}" = "true" ]; then
-              echo "Would delete Azure image: ${image_id}"
-            else
-              echo "Deleting Azure image: ${image_id}"
-              az image delete --ids "${image_id}"
-            fi
-          done <<< "${image_ids}"
