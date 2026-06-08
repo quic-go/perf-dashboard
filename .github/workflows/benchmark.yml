@@ -18,6 +18,7 @@ jobs:
   run:
     name: Smoke ${{ inputs.cloud_provider }} ${{ inputs.location }}
     runs-on: ubuntu-latest
+    environment: ${{ github.event_name == 'workflow_dispatch' && 'cloud-test' || null }}
     timeout-minutes: 30
     concurrency:
       group: ${{ format('cloud-{0}', inputs.cloud_provider) }}
