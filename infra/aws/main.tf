@@ -72,6 +72,7 @@ resource "aws_security_group" "node" {
   tags = {
     Name      = var.name
     ManagedBy = "perf-dashboard"
+    RunId     = var.name
   }
 }
 
@@ -89,5 +90,6 @@ resource "aws_instance" "node" {
   tags = {
     Name      = var.name
     ManagedBy = "perf-dashboard"
+    RunId     = var.name
   }
 }
