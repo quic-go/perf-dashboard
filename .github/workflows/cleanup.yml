@@ -13,6 +13,9 @@ permissions:
   id-token: write
   contents: read
 
+env:
+  DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && 'true' || 'false' }}
+
 jobs:
   cleanup-aws:
     runs-on: ubuntu-latest
@@ -27,8 +30,6 @@ jobs:
           aws-region: us-west-2
           role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
       - name: Delete old and abandoned resources
-        env:
-          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
         run: |
           set -euo pipefail
 
@@ -131,8 +132,6 @@ jobs:
           workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ vars.GCP_PACKER_SERVICE_ACCOUNT }}
       - name: Delete abandoned benchmark instances
-        env:
-          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
         run: |
           set -euo pipefail
 
@@ -155,8 +154,6 @@ jobs:
             fi
           done <<< "${instances}"
       - name: Keep only the newest image, delete the rest
-        env:
-          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
         run: |
           set -euo pipefail
 
@@ -197,7 +194,6 @@ jobs:
       - name: Delete old, temporary, and abandoned resources
         env:
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
-          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
         run: |
           set -euo pipefail
 
