@@ -1,0 +1,52 @@
+name: Create benchmark node
+description: Create one temporary benchmark node with Terraform.
+
+inputs:
+  role:
+    required: true
+    description: Node role, for example server or client.
+  cloud_provider:
+    required: true
+    description: Cloud provider Terraform root to use.
+  location:
+    required: true
+    description: Provider location, for example AWS region, GCP zone, or Azure region.
+  name:
+    required: true
+    description: Unique Terraform node name.
+
+outputs:
+  directory:
+    description: Terraform working directory containing state for this node.
+    value: ${{ steps.create.outputs.directory }}
+  public_ip:
+    description: Node public IP address.
+    value: ${{ steps.create.outputs.public_ip }}
+  user:
+    description: SSH user.
+    value: ${{ steps.create.outputs.user }}
+
+runs:
+  using: composite
+  steps:
+    - name: Create node
+      id: create
+      shell: bash
+      env:
+        TF_VAR_name: ${{ inputs.name }}
+        TF_VAR_location: ${{ inputs.location }}
+      run: |
+        set -euo pipefail
+
+        node_dir="$(mktemp -d "${RUNNER_TEMP}/${{ inputs.role }}-${{ inputs.cloud_provider }}-XXXXXX")"
+        cp -R "${GITHUB_WORKSPACE}/infra/${{ inputs.cloud_provider }}/." "${node_dir}/"
+        terraform -chdir="${node_dir}" init -input=false
+        terraform -chdir="${node_dir}" apply -input=false -auto-approve
+
+        node_json="$(terraform -chdir="${node_dir}" output -json node | jq -c '.')"
+        public_ip="$(jq -r '.public_ip' <<< "${node_json}")"
+        user="$(jq -r '.user' <<< "${node_json}")"
+
+        echo "directory=${node_dir}" >> "${GITHUB_OUTPUT}"
+        echo "public_ip=${public_ip}" >> "${GITHUB_OUTPUT}"
+        echo "user=${user}" >> "${GITHUB_OUTPUT}"
