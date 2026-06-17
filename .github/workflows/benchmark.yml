@@ -136,11 +136,11 @@ jobs:
         run: cat "${RUNNER_TEMP}/server-node/server.env" "${RUNNER_TEMP}/client-node/client.env" >> "${GITHUB_OUTPUT}"
 
       - name: Install SSH key
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY_PRIMARY }}
         run: |
           install -d -m 0700 ~/.ssh
-          cat > ~/.ssh/quic-perf <<'EOF'
-          ${{ secrets.SSH_PRIVATE_KEY_PRIMARY }}
-          EOF
+          printf '%b\n' "${SSH_PRIVATE_KEY}" | sed 's/\r$//' > ~/.ssh/quic-perf
           chmod 0600 ~/.ssh/quic-perf
           cat > ~/.ssh/config <<'EOF'
           Host *
