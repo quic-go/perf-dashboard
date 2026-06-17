@@ -34,40 +34,54 @@ permissions:
   contents: read
   id-token: write
 
+concurrency:
+  group: cloud-benchmark
+  cancel-in-progress: false
+
+env:
+  TF_IN_AUTOMATION: true
+  TF_VAR_gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
+  TF_VAR_azure_subscription_id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+  TF_VAR_azure_resource_group: ${{ vars.AZURE_RESOURCE_GROUP }}
+  TF_VAR_ssh_public_key: ${{ vars.SSH_PUBLIC_KEY_PRIMARY }}
+
 jobs:
-  run:
-    name: Benchmark ${{ inputs.client_implementation }} client to ${{ inputs.server_implementation }} server
+  create-node:
+    name: Create ${{ matrix.role }} node
     runs-on: ubuntu-latest
-    environment: ${{ github.event_name == 'workflow_dispatch' && 'cloud-test' || null }}
-    timeout-minutes: 60
-    concurrency:
-      group: cloud-benchmark
-      cancel-in-progress: false
-    env:
-      TF_IN_AUTOMATION: true
-      TF_VAR_gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
-      TF_VAR_azure_subscription_id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-      TF_VAR_azure_resource_group: ${{ vars.AZURE_RESOURCE_GROUP }}
-      TF_VAR_ssh_public_key: ${{ vars.SSH_PUBLIC_KEY_PRIMARY }}
+    environment: cloud-test
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - role: server
+            cloud_provider: ${{ inputs.server_cloud_provider }}
+            location: ${{ inputs.server_location }}
+            name: quic-perf-${{ inputs.server_cloud_provider }}-server-${{ github.run_id }}-${{ github.run_attempt }}
+          - role: client
+            cloud_provider: ${{ inputs.client_cloud_provider }}
+            location: ${{ inputs.client_location }}
+            name: quic-perf-${{ inputs.client_cloud_provider }}-client-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@v6
 
       - name: Configure AWS credentials
-        if: inputs.server_cloud_provider == 'aws' || inputs.client_cloud_provider == 'aws'
+        if: matrix.cloud_provider == 'aws'
         uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b # v6.2.0
         with:
           aws-region: us-west-2
           role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
 
       - name: Authenticate to GCP
-        if: inputs.server_cloud_provider == 'gcp' || inputs.client_cloud_provider == 'gcp'
+        if: matrix.cloud_provider == 'gcp'
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
         with:
           workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ vars.GCP_PACKER_SERVICE_ACCOUNT }}
 
       - name: Authenticate to Azure
-        if: inputs.server_cloud_provider == 'azure' || inputs.client_cloud_provider == 'azure'
+        if: matrix.cloud_provider == 'azure'
         uses: azure/login@532459ea530d8321f2fb9bb10d1e0bcf23869a43 # v3.0.0
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
@@ -83,28 +97,46 @@ jobs:
           terraform_version: ${{ steps.terraform-version.outputs.version }}
           terraform_wrapper: false
 
-      - name: Create server node
-        id: server-node
+      - name: Create node
+        id: node
         uses: ./.github/actions/create-node
         with:
-          role: server
-          cloud_provider: ${{ inputs.server_cloud_provider }}
-          location: ${{ inputs.server_location }}
-          name: quic-perf-${{ inputs.server_cloud_provider }}-server-${{ github.run_id }}-${{ github.run_attempt }}
+          role: ${{ matrix.role }}
+          cloud_provider: ${{ matrix.cloud_provider }}
+          location: ${{ matrix.location }}
+          name: ${{ matrix.name }}
 
-      - name: Create client node
-        id: client-node
-        uses: ./.github/actions/create-node
+      - name: Write node info
+        run: |
+          echo "${{ matrix.role }}_ip=${{ steps.node.outputs.public_ip }}" > "${RUNNER_TEMP}/${{ matrix.role }}.env"
+          echo "${{ matrix.role }}_user=${{ steps.node.outputs.user }}" >> "${RUNNER_TEMP}/${{ matrix.role }}.env"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          role: client
-          cloud_provider: ${{ inputs.client_cloud_provider }}
-          location: ${{ inputs.client_location }}
-          name: quic-perf-${{ inputs.client_cloud_provider }}-client-${{ github.run_id }}-${{ github.run_attempt }}
+          name: ${{ matrix.role }}-node
+          path: |
+            ${{ runner.temp }}/${{ matrix.role }}-node
+            ${{ runner.temp }}/${{ matrix.role }}.env
+          if-no-files-found: ignore
+
+  benchmark:
+    name: Benchmark
+    needs: create-node
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: "*-node"
+          path: ${{ runner.temp }}
+
+      - name: Read node info
+        id: nodes
+        run: cat "${RUNNER_TEMP}/server-node/server.env" "${RUNNER_TEMP}/client-node/client.env" >> "${GITHUB_OUTPUT}"
 
       - name: Install SSH key
         run: |
-          set -euo pipefail
-
           install -d -m 0700 ~/.ssh
           cat > ~/.ssh/quic-perf <<'EOF'
           ${{ secrets.SSH_PRIVATE_KEY_PRIMARY }}
@@ -117,14 +149,13 @@ jobs:
             UserKnownHostsFile /dev/null
             ConnectionAttempts 60
           EOF
-          chmod 0600 ~/.ssh/config
 
       - name: Start server
         run: |
           if [ "${{ inputs.server_implementation }}" = "quic-go" ]; then
-            ssh "${{ steps.server-node.outputs.user }}@${{ steps.server-node.outputs.public_ip }}" "pkill -f '[q]uic-go-perf --run-server' 2>/dev/null || true; nohup /opt/quic-go/perf/quic-go-perf --run-server --server-address=0.0.0.0:4433 > /tmp/quic-go-server.log 2>&1 &"
+            ssh "${{ steps.nodes.outputs.server_user }}@${{ steps.nodes.outputs.server_ip }}" "nohup /opt/quic-go/perf/quic-go-perf --run-server --server-address=0.0.0.0:4433 >/tmp/quic-go-server.log 2>&1 &"
           else
-            ssh "${{ steps.server-node.outputs.user }}@${{ steps.server-node.outputs.public_ip }}" "pkill -f '[s]ecnetperf -exec:maxtput' 2>/dev/null || true; nohup /opt/msquic/build/bin/Release/secnetperf -exec:maxtput -bind:0.0.0.0 > /tmp/msquic-server.log 2>&1 &"
+            ssh "${{ steps.nodes.outputs.server_user }}@${{ steps.nodes.outputs.server_ip }}" "nohup /opt/msquic/build/bin/Release/secnetperf -exec:maxtput -bind:0.0.0.0 >/tmp/msquic-server.log 2>&1 &"
           fi
           sleep 3
 
@@ -133,18 +164,16 @@ jobs:
         run: |
           status=0
           if [ "${{ inputs.client_implementation }}" = "quic-go" ]; then
-            ssh "${{ steps.client-node.outputs.user }}@${{ steps.client-node.outputs.public_ip }}" timeout 10m /opt/quic-go/perf/quic-go-perf --server-address=${{ steps.server-node.outputs.public_ip }}:4433 --upload-bytes=1000000000 --download-bytes=1000000000 > "${RUNNER_TEMP}/benchmark.log" 2>&1 || status=$?
+            ssh "${{ steps.nodes.outputs.client_user }}@${{ steps.nodes.outputs.client_ip }}" timeout 10m /opt/quic-go/perf/quic-go-perf --server-address=${{ steps.nodes.outputs.server_ip }}:4433 --upload-bytes=1000000000 --download-bytes=1000000000 > "${RUNNER_TEMP}/benchmark.log" 2>&1 || status=$?
           else
-            ssh "${{ steps.client-node.outputs.user }}@${{ steps.client-node.outputs.public_ip }}" timeout 10m /opt/msquic/build/bin/Release/secnetperf -target:${{ steps.server-node.outputs.public_ip }} -port:4433 -exec:maxtput -up:1000000000 -down:1000000000 -ptput:1 > "${RUNNER_TEMP}/benchmark.log" 2>&1 || status=$?
+            ssh "${{ steps.nodes.outputs.client_user }}@${{ steps.nodes.outputs.client_ip }}" timeout 10m /opt/msquic/build/bin/Release/secnetperf -target:${{ steps.nodes.outputs.server_ip }} -port:4433 -exec:maxtput -up:1000000000 -down:1000000000 -ptput:1 > "${RUNNER_TEMP}/benchmark.log" 2>&1 || status=$?
           fi
-
           echo "status=${status}" >> "${GITHUB_OUTPUT}"
           exit "${status}"
 
       - name: Stop server
-        if: always() && steps.server-node.outputs.public_ip != ''
-        run: |
-          ssh "${{ steps.server-node.outputs.user }}@${{ steps.server-node.outputs.public_ip }}" "pkill -f '[q]uic-go-perf --run-server' 2>/dev/null || true; pkill -f '[s]ecnetperf -exec:maxtput' 2>/dev/null || true"
+        if: always()
+        run: ssh "${{ steps.nodes.outputs.server_user }}@${{ steps.nodes.outputs.server_ip }}" "pkill -f '[q]uic-go-perf --run-server' 2>/dev/null || true; pkill -f '[s]ecnetperf -exec:maxtput' 2>/dev/null || true"
 
       - name: Write benchmark summary
         if: always()
@@ -154,8 +183,8 @@ jobs:
 
           | Node | Provider | Location | Public IP | Implementation |
           | --- | --- | --- | --- | --- |
-          | Server | ${{ inputs.server_cloud_provider }} | ${{ inputs.server_location }} | ${{ steps.server-node.outputs.public_ip }} | ${{ inputs.server_implementation }} |
-          | Client | ${{ inputs.client_cloud_provider }} | ${{ inputs.client_location }} | ${{ steps.client-node.outputs.public_ip }} | ${{ inputs.client_implementation }} |
+          | Server | ${{ inputs.server_cloud_provider }} | ${{ inputs.server_location }} | ${{ steps.nodes.outputs.server_ip }} | ${{ inputs.server_implementation }} |
+          | Client | ${{ inputs.client_cloud_provider }} | ${{ inputs.client_location }} | ${{ steps.nodes.outputs.client_ip }} | ${{ inputs.client_implementation }} |
 
           Upload: 1 GB
 
@@ -170,10 +199,64 @@ jobs:
           fi
           echo '```' >> "${GITHUB_STEP_SUMMARY}"
 
-      - name: Destroy server node
-        if: always() && steps.server-node.outputs.directory != ''
-        run: TF_VAR_name="quic-perf-${{ inputs.server_cloud_provider }}-server-${{ github.run_id }}-${{ github.run_attempt }}" TF_VAR_location="${{ inputs.server_location }}" terraform -chdir="${{ steps.server-node.outputs.directory }}" destroy -input=false -auto-approve
+  destroy-node:
+    name: Destroy ${{ matrix.role }} node
+    needs: [create-node, benchmark]
+    if: always()
+    runs-on: ubuntu-latest
+    environment: cloud-test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - role: server
+            cloud_provider: ${{ inputs.server_cloud_provider }}
+            location: ${{ inputs.server_location }}
+            name: quic-perf-${{ inputs.server_cloud_provider }}-server-${{ github.run_id }}-${{ github.run_attempt }}
+          - role: client
+            cloud_provider: ${{ inputs.client_cloud_provider }}
+            location: ${{ inputs.client_location }}
+            name: quic-perf-${{ inputs.client_cloud_provider }}-client-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@v6
 
-      - name: Destroy client node
-        if: always() && steps.client-node.outputs.directory != ''
-        run: TF_VAR_name="quic-perf-${{ inputs.client_cloud_provider }}-client-${{ github.run_id }}-${{ github.run_attempt }}" TF_VAR_location="${{ inputs.client_location }}" terraform -chdir="${{ steps.client-node.outputs.directory }}" destroy -input=false -auto-approve
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.role }}-node
+          path: ${{ runner.temp }}/${{ matrix.role }}-artifact
+
+      - name: Configure AWS credentials
+        if: matrix.cloud_provider == 'aws'
+        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b # v6.2.0
+        with:
+          aws-region: us-west-2
+          role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
+
+      - name: Authenticate to GCP
+        if: matrix.cloud_provider == 'gcp'
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_PACKER_SERVICE_ACCOUNT }}
+
+      - name: Authenticate to Azure
+        if: matrix.cloud_provider == 'azure'
+        uses: azure/login@532459ea530d8321f2fb9bb10d1e0bcf23869a43 # v3.0.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Read Terraform version
+        id: terraform-version
+        run: echo "version=$(cat .terraform-version)" >> "${GITHUB_OUTPUT}"
+
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ steps.terraform-version.outputs.version }}
+          terraform_wrapper: false
+
+      - name: Destroy node
+        run: |
+          terraform -chdir="${{ runner.temp }}/${{ matrix.role }}-artifact/${{ matrix.role }}-node" init -input=false
+          TF_VAR_name="${{ matrix.name }}" TF_VAR_location="${{ matrix.location }}" terraform -chdir="${{ runner.temp }}/${{ matrix.role }}-artifact/${{ matrix.role }}-node" destroy -input=false -auto-approve
