@@ -152,12 +152,9 @@ jobs:
           cat > ~/.ssh/config <<'EOF'
           Host *
             IdentityFile ~/.ssh/quic-perf
-            StrictHostKeyChecking yes
+            StrictHostKeyChecking accept-new
             ConnectionAttempts 60
           EOF
-
-      - name: Trust node host keys
-        run: ssh-keyscan -H "${{ steps.nodes.outputs.server_ip }}" "${{ steps.nodes.outputs.client_ip }}" >> ~/.ssh/known_hosts
 
       - name: Start server
         run: |
