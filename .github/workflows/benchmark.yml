@@ -139,8 +139,12 @@ jobs:
       - name: Read node info
         id: nodes
         run: |
-          terraform -chdir=infra/${{ inputs.server_cloud_provider }} output -state="${RUNNER_TEMP}/server-node/terraform.tfstate" -json node | jq -r '"server_ip=\(.public_ip)\nserver_user=\(.user)"' >> "${GITHUB_OUTPUT}"
-          terraform -chdir=infra/${{ inputs.client_cloud_provider }} output -state="${RUNNER_TEMP}/client-node/terraform.tfstate" -json node | jq -r '"client_ip=\(.public_ip)\nclient_user=\(.user)"' >> "${GITHUB_OUTPUT}"
+          server_state="${RUNNER_TEMP}/server-node/terraform.tfstate"
+          client_state="${RUNNER_TEMP}/client-node/terraform.tfstate"
+          terraform -chdir=infra/${{ inputs.server_cloud_provider }} output -state="${server_state}" -json node |
+            jq -r '"server_ip=\(.public_ip)\nserver_user=\(.user)"' >> "${GITHUB_OUTPUT}"
+          terraform -chdir=infra/${{ inputs.client_cloud_provider }} output -state="${client_state}" -json node |
+            jq -r '"client_ip=\(.public_ip)\nclient_user=\(.user)"' >> "${GITHUB_OUTPUT}"
 
       - name: Install SSH key
         env:
@@ -158,28 +162,40 @@ jobs:
 
       - name: Start server
         run: |
+          server="${{ steps.nodes.outputs.server_user }}@${{ steps.nodes.outputs.server_ip }}"
           if [ "${{ inputs.server_implementation }}" = "quic-go" ]; then
-            ssh "${{ steps.nodes.outputs.server_user }}@${{ steps.nodes.outputs.server_ip }}" "nohup /opt/quic-go/perf/quic-go-perf --run-server --server-address=0.0.0.0:4433 >/tmp/quic-go-server.log 2>&1 &"
+            ssh "${server}" 'nohup /opt/quic-go/perf/quic-go-perf --run-server --server-address=0.0.0.0:4433 >/tmp/quic-go-server.log 2>&1 & echo $! >/tmp/benchmark-server.pid'
           else
-            ssh "${{ steps.nodes.outputs.server_user }}@${{ steps.nodes.outputs.server_ip }}" "nohup /opt/msquic/build/bin/Release/secnetperf -exec:maxtput -bind:0.0.0.0 >/tmp/msquic-server.log 2>&1 &"
+            ssh "${server}" 'nohup /opt/msquic/build/bin/Release/secnetperf -exec:maxtput -bind:0.0.0.0 >/tmp/msquic-server.log 2>&1 & echo $! >/tmp/benchmark-server.pid'
           fi
           sleep 3
 
       - name: Run benchmark
         id: benchmark
         run: |
+          client="${{ steps.nodes.outputs.client_user }}@${{ steps.nodes.outputs.client_ip }}"
           status=0
           if [ "${{ inputs.client_implementation }}" = "quic-go" ]; then
-            ssh "${{ steps.nodes.outputs.client_user }}@${{ steps.nodes.outputs.client_ip }}" timeout 10m /opt/quic-go/perf/quic-go-perf --server-address=${{ steps.nodes.outputs.server_ip }}:4433 --upload-bytes=1000000000 --download-bytes=1000000000 > "${RUNNER_TEMP}/benchmark.log" 2>&1 || status=$?
+            ssh "${client}" timeout 10m \
+              /opt/quic-go/perf/quic-go-perf \
+              --server-address=${{ steps.nodes.outputs.server_ip }}:4433 \
+              --upload-bytes=1000000000 --download-bytes=1000000000 \
+              > "${RUNNER_TEMP}/benchmark.log" 2>&1 || status=$?
           else
-            ssh "${{ steps.nodes.outputs.client_user }}@${{ steps.nodes.outputs.client_ip }}" timeout 10m /opt/msquic/build/bin/Release/secnetperf -target:${{ steps.nodes.outputs.server_ip }} -port:4433 -exec:maxtput -up:1000000000 -down:1000000000 -ptput:1 > "${RUNNER_TEMP}/benchmark.log" 2>&1 || status=$?
+            ssh "${client}" timeout 10m \
+              /opt/msquic/build/bin/Release/secnetperf \
+              -target:${{ steps.nodes.outputs.server_ip }} -port:4433 \
+              -exec:maxtput -up:1000000000 -down:1000000000 -ptput:1 \
+              > "${RUNNER_TEMP}/benchmark.log" 2>&1 || status=$?
           fi
           echo "status=${status}" >> "${GITHUB_OUTPUT}"
           exit "${status}"
 
       - name: Stop server
         if: always()
-        run: ssh "${{ steps.nodes.outputs.server_user }}@${{ steps.nodes.outputs.server_ip }}" "pkill -f '[q]uic-go-perf --run-server' 2>/dev/null || true; pkill -f '[s]ecnetperf -exec:maxtput' 2>/dev/null || true"
+        run: |
+          server="${{ steps.nodes.outputs.server_user }}@${{ steps.nodes.outputs.server_ip }}"
+          ssh "${server}" 'kill "$(cat /tmp/benchmark-server.pid)" 2>/dev/null || true'
 
       - name: Write benchmark summary
         if: always()
@@ -268,4 +284,5 @@ jobs:
           state="${{ runner.temp }}/${{ matrix.role }}-artifact/terraform.tfstate"
           [ -f "${state}" ] || exit 0
           terraform -chdir=infra/${{ matrix.cloud_provider }} init -input=false
-          TF_VAR_name="${{ matrix.name }}" TF_VAR_location="${{ matrix.location }}" terraform -chdir=infra/${{ matrix.cloud_provider }} destroy -state="${state}" -input=false -auto-approve
+          TF_VAR_name="${{ matrix.name }}" TF_VAR_location="${{ matrix.location }}" \
+            terraform -chdir=infra/${{ matrix.cloud_provider }} destroy -state="${state}" -input=false -auto-approve
