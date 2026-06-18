@@ -32,12 +32,14 @@ runs:
       env:
         TF_VAR_name: ${{ inputs.name }}
         TF_VAR_location: ${{ inputs.location }}
+        ROLE: ${{ inputs.role }}
+        CLOUD_PROVIDER: ${{ inputs.cloud_provider }}
       run: |
         set -euo pipefail
 
-        node_dir="${RUNNER_TEMP}/${{ inputs.role }}-node"
+        node_dir="${RUNNER_TEMP}/${ROLE}-node"
         mkdir -p "${node_dir}"
-        cp -R "${GITHUB_WORKSPACE}/infra/${{ inputs.cloud_provider }}/." "${node_dir}/"
+        cp -R "${GITHUB_WORKSPACE}/infra/${CLOUD_PROVIDER}/." "${node_dir}/"
         terraform -chdir="${node_dir}" init -input=false
         terraform -chdir="${node_dir}" apply -input=false -auto-approve
 
