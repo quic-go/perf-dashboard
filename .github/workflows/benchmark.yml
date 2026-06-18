@@ -180,7 +180,7 @@ jobs:
       - name: Write benchmark summary
         if: always()
         run: |
-          cat >> "${GITHUB_STEP_SUMMARY}" <<EOF
+          cat >> "${GITHUB_STEP_SUMMARY}" <<'EOF'
           ## Benchmark Results
 
           | Node | Provider | Location | Public IP | Implementation |
@@ -194,7 +194,7 @@ jobs:
 
           Result: ${{ steps.benchmark.outputs.status || 'not run' }}
 
-          \`\`\`text
+          ```text
           EOF
           if [ -f "${RUNNER_TEMP}/benchmark.log" ]; then
             tail -n 200 "${RUNNER_TEMP}/benchmark.log" >> "${GITHUB_STEP_SUMMARY}"
