@@ -111,6 +111,7 @@ jobs:
         with:
           name: ${{ matrix.role }}-node
           path: ${{ runner.temp }}/${{ matrix.role }}-node/terraform.tfstate
+          retention-days: 1
           if-no-files-found: ignore
 
   benchmark:
