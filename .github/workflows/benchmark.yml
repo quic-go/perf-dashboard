@@ -139,12 +139,13 @@ jobs:
       - name: Read node info
         id: nodes
         run: |
+          set -euo pipefail
           server_state="${RUNNER_TEMP}/server-node/terraform.tfstate"
           client_state="${RUNNER_TEMP}/client-node/terraform.tfstate"
-          terraform -chdir=infra/${{ inputs.server_cloud_provider }} output -state="${server_state}" -json node |
-            jq -r '"server_ip=\(.public_ip)\nserver_user=\(.user)"' >> "${GITHUB_OUTPUT}"
-          terraform -chdir=infra/${{ inputs.client_cloud_provider }} output -state="${client_state}" -json node |
-            jq -r '"client_ip=\(.public_ip)\nclient_user=\(.user)"' >> "${GITHUB_OUTPUT}"
+          server_node="$(terraform output -state="${server_state}" -json node)"
+          client_node="$(terraform output -state="${client_state}" -json node)"
+          jq -r '"server_ip=\(.public_ip)\nserver_user=\(.user)"' <<< "${server_node}" >> "${GITHUB_OUTPUT}"
+          jq -r '"client_ip=\(.public_ip)\nclient_user=\(.user)"' <<< "${client_node}" >> "${GITHUB_OUTPUT}"
 
       - name: Install SSH key
         env:
