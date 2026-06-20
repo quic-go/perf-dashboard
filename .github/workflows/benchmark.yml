@@ -64,7 +64,7 @@ jobs:
             location: ${{ inputs.client_location }}
             name: quic-perf-${{ inputs.client_cloud_provider }}-client-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Configure AWS credentials
         if: matrix.cloud_provider == 'aws'
@@ -106,7 +106,7 @@ jobs:
           location: ${{ matrix.location }}
           name: ${{ matrix.name }}
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: ${{ matrix.role }}-node
@@ -120,9 +120,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: "*-node"
           path: ${{ runner.temp }}
@@ -241,9 +241,9 @@ jobs:
             location: ${{ inputs.client_location }}
             name: quic-perf-${{ inputs.client_cloud_provider }}-client-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         continue-on-error: true
         with:
           name: ${{ matrix.role }}-node
