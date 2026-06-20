@@ -177,13 +177,13 @@ jobs:
           client="${{ steps.nodes.outputs.client_user }}@${{ steps.nodes.outputs.client_ip }}"
           status=0
           if [ "${{ inputs.client_implementation }}" = "quic-go" ]; then
-            ssh "${client}" timeout 10m \
+            ssh "${client}" \
               /opt/quic-go/perf/quic-go-perf \
               --server-address=${{ steps.nodes.outputs.server_ip }}:4433 \
               --upload-bytes=1000000000 --download-bytes=1000000000 \
               > "${RUNNER_TEMP}/benchmark.log" 2>&1 || status=$?
           else
-            ssh "${client}" timeout 10m \
+            ssh "${client}" \
               /opt/msquic/build/bin/Release/secnetperf \
               -target:${{ steps.nodes.outputs.server_ip }} -port:4433 \
               -exec:maxtput -up:1000000000 -down:1000000000 -ptput:1 \
