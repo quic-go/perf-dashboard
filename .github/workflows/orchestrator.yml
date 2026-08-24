@@ -3,14 +3,8 @@ name: Orchestrator
 on:
   push:
     branches: [ master ]
-    paths:
-      - "orchestrator/**"
-      - ".github/workflows/orchestrator.yml"
   pull_request:
     branches: [ master ]
-    paths:
-      - "orchestrator/**"
-      - ".github/workflows/orchestrator.yml"
 
 permissions:
   contents: read
@@ -32,3 +26,66 @@ jobs:
         run: ruff format --check --diff .
       - name: Test
         run: python3 -m unittest discover -s orchestrator -v
+
+  integration:
+    name: Integration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Generate SSH key
+        run: ssh-keygen -q -t ed25519 -N "" -f "${RUNNER_TEMP}/quic-perf"
+
+      - name: Restore runner image
+        id: runner-image
+        uses: actions/cache@v5
+        with:
+          path: ${{ runner.temp }}/quic-perf-runner.tar
+          key: quic-perf-runner-v1-${{ runner.os }}-${{ hashFiles('perf.pkr.hcl') }}
+
+      - name: Install Packer
+        if: steps.runner-image.outputs.cache-hit != 'true'
+        uses: hashicorp/setup-packer@ce93c3c08a6c2ff2275bf4b54ff0d9a75f6c9789 # v3.4.0
+        with:
+          version: "1.15.2"
+
+      - name: Build runner image
+        if: steps.runner-image.outputs.cache-hit != 'true'
+        run: |
+          packer init .
+          packer build -only=docker.ubuntu -var "ssh_public_key_primary=$(cat "${RUNNER_TEMP}/quic-perf.pub")" .
+          docker save --output "${RUNNER_TEMP}/quic-perf-runner.tar" quic-perf-runner:local
+
+      - name: Load runner image
+        if: steps.runner-image.outputs.cache-hit == 'true'
+        run: docker load --input "${RUNNER_TEMP}/quic-perf-runner.tar"
+
+      - name: Start runner containers
+        run: |
+          docker network create quic-perf
+          docker run -d --name server --network quic-perf -p 127.0.0.1:2222:22 \
+            -v "${RUNNER_TEMP}/quic-perf.pub:/home/perf/.ssh/authorized_keys:ro" \
+            quic-perf-runner:local
+          docker run -d --name client --network quic-perf -p 127.0.0.1:2223:22 \
+            -v "${RUNNER_TEMP}/quic-perf.pub:/home/perf/.ssh/authorized_keys:ro" \
+            quic-perf-runner:local
+
+      - name: Run quic-go benchmark
+        run: |
+          python3 orchestrator/run_benchmark.py \
+            --identity-file "${RUNNER_TEMP}/quic-perf" \
+            --server-host 127.0.0.1 --server-ssh-port 2222 \
+            --client-host 127.0.0.1 --client-ssh-port 2223 \
+            --server-address server \
+            --server-implementation quic-go --client-implementation quic-go \
+            --upload-bytes 1000000 --download-bytes 1000000
+
+      - name: Run MsQuic benchmark
+        run: |
+          python3 orchestrator/run_benchmark.py \
+            --identity-file "${RUNNER_TEMP}/quic-perf" \
+            --server-host 127.0.0.1 --server-ssh-port 2222 \
+            --client-host 127.0.0.1 --client-ssh-port 2223 \
+            --server-address server \
+            --server-implementation msquic --client-implementation msquic \
+            --upload-bytes 1000000 --download-bytes 1000000
