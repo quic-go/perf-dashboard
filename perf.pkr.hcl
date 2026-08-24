@@ -231,6 +231,11 @@ build {
       "sudo git clone --depth 1 --branch main --single-branch https://github.com/microsoft/msquic.git /opt/msquic",
       "sudo git -C /opt/msquic submodule update --init --recursive --depth 1",
 
+      # MsQuic currently generates an invalid X.509 v4 test certificate, which
+      # quic-go rejects. Use OpenSSL's zero-indexed v3 constant.
+      # See https://github.com/microsoft/msquic/pull/6259.
+      "sudo sed -i 's/X509_set_version(Cert, 3);/X509_set_version(Cert, X509_VERSION_3);/' /opt/msquic/src/platform/selfsign_openssl.c",
+
       "echo '=== Building MsQuic with QUIC_BUILD_PERF=ON ==='",
       "sudo mkdir -p /opt/msquic/build",
       "cd /opt/msquic/build && sudo cmake -G 'Unix Makefiles' -DQUIC_BUILD_PERF=ON ..",
