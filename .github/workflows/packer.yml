@@ -3,8 +3,12 @@ name: Build images
 on:
   push:
     branches: [ master ]
+    paths-ignore:
+      - "orchestrator/**"
   pull_request:
     branches: [ master ]
+    paths-ignore:
+      - "orchestrator/**"
   workflow_dispatch:
 
 permissions:
