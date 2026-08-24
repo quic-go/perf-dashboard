@@ -12,6 +12,10 @@ packer {
       version = ">= 2.6.1"
       source  = "github.com/hashicorp/azure"
     }
+    docker = {
+      version = ">= 1.1.4"
+      source  = "github.com/hashicorp/docker"
+    }
   }
 }
 
@@ -51,6 +55,19 @@ variable "ssh_public_keys_additional" {
 
 locals {
   image_name = "quic-perf-runner-${formatdate("YYYYMMDDhhmmss", timestamp())}"
+}
+
+# The Docker image is only used for local development.
+source "docker" "ubuntu" {
+  image    = "ubuntu:24.04"
+  platform = "linux/amd64"
+  commit   = true
+
+  changes = [
+    "CMD [\"/usr/sbin/sshd\", \"-D\", \"-e\"]",
+    "EXPOSE 22/tcp",
+    "EXPOSE 4433/udp",
+  ]
 }
 
 source "amazon-ebs" "ubuntu" {
@@ -136,7 +153,17 @@ build {
     "source.amazon-ebs.ubuntu",
     "source.googlecompute.ubuntu",
     "source.azure-arm.ubuntu",
+    "source.docker.ubuntu",
   ]
+
+  provisioner "shell" {
+    only             = ["docker.ubuntu"]
+    environment_vars = ["DEBIAN_FRONTEND=noninteractive"]
+    inline = [
+      "apt-get update && apt-get install -y openssh-server sudo",
+      "mkdir -p /run/sshd",
+    ]
+  }
 
   provisioner "shell" {
     environment_vars = ["DEBIAN_FRONTEND=noninteractive"]
@@ -214,11 +241,13 @@ build {
   # Stage the auto-shutdown files in /tmp; the SSH user can't write to
   # privileged paths directly, so the shell provisioner installs them.
   provisioner "file" {
+    except      = ["docker.ubuntu"]
     source      = "${path.root}/files/"
     destination = "/tmp/"
   }
 
   provisioner "shell" {
+    except = ["docker.ubuntu"]
     inline = [
       "echo '=== Installing auto-shutdown service ==='",
       "sudo install -o root -g root -m 0755 /tmp/shutdown-check.sh      /usr/local/sbin/shutdown-check.sh",
@@ -238,10 +267,21 @@ build {
     ]
   }
 
+  provisioner "shell" {
+    only   = ["docker.ubuntu"]
+    inline = ["/usr/sbin/sshd -t"]
+  }
+
   post-processor "manifest" {
     output = "packer-manifest.json"
     custom_data = {
       image_name = local.image_name
     }
+  }
+
+  post-processor "docker-tag" {
+    only       = ["docker.ubuntu"]
+    repository = "quic-perf-runner"
+    tags       = ["local"]
   }
 }

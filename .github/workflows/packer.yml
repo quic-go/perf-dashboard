@@ -29,6 +29,8 @@ jobs:
         run: packer fmt -check -diff .
       - name: packer init
         run: packer init .
+      - name: packer validate (Docker)
+        run: packer validate -only=docker.ubuntu .
       - name: packer validate (AWS)
         run: packer validate -only=amazon-ebs.ubuntu .
       - name: packer validate (GCP)
