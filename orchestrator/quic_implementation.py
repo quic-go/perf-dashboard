@@ -75,7 +75,8 @@ class QuicImplementation(ABC):
         command = shlex.join(self.server_command)
         server.run(
             f"nohup {command} >/tmp/benchmark-server.log 2>&1 & "
-            "echo $! >/tmp/benchmark-server.pid"
+            "echo $! >/tmp/benchmark-server.pid",
+            timeout=10,
         )
 
     def stop_server(self, server: SSHNode) -> None:
@@ -83,6 +84,6 @@ class QuicImplementation(ABC):
             "if [ -f /tmp/benchmark-server.pid ]; then "
             'kill "$(cat /tmp/benchmark-server.pid)" 2>/dev/null || true; '
             "rm -f /tmp/benchmark-server.pid; fi",
-            check=False,
             capture_output=True,
+            timeout=10,
         )
