@@ -1,0 +1,34 @@
+name: Orchestrator
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - "orchestrator/**"
+      - ".github/workflows/orchestrator.yml"
+  pull_request:
+    branches: [ master ]
+    paths:
+      - "orchestrator/**"
+      - ".github/workflows/orchestrator.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    name: Python
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Ruff
+        uses: astral-sh/ruff-action@278981a28ce3188b1e39527901f38254bf3aac89 # v4.1.0
+        with:
+          version: "0.16.4"
+          args: "--version"
+      - name: Lint
+        run: ruff check --output-format=github .
+      - name: Check formatting
+        run: ruff format --check --diff .
+      - name: Test
+        run: python3 -m unittest discover -s orchestrator -v
