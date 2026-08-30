@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# Shut the machine down after 10 minutes without any logged-in users.
+# Shut the machine down after 10 minutes without any logged-in users or benchmarks.
 # Triggered every minute by shutdown-check.timer.
 
 TIMER_FILE=/var/run/shutdown-timer
 users=$(w -h | sort -u -k1,1 | wc -l)
 now=$(date +%s)
 
-if [ "$users" -gt 0 ]; then
+# Non-interactive SSH commands don't appear in w, so count benchmark processes too.
+if [ "$users" -gt 0 ] || pgrep -u perf -x 'quic-go-perf|secnetperf' >/dev/null; then
   rm -f "$TIMER_FILE"
 else
   if [ -f "$TIMER_FILE" ]; then
