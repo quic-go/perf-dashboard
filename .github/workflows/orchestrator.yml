@@ -32,6 +32,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Generate SSH key
         run: ssh-keygen -q -t ed25519 -N "" -f "${RUNNER_TEMP}/quic-perf"
