@@ -79,8 +79,8 @@ def main() -> int:
         )
         server.wait_for_ssh()
         client.wait_for_ssh()
-        server_implementation.start_server(server)
         try:
+            server_implementation.start_server(server)
             time.sleep(3)
             result = client_implementation.run_throughput_test(
                 client,
