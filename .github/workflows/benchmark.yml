@@ -122,16 +122,6 @@ on:
         required: true
         type: choice
         options: *locations
-      server_implementation:
-        description: Server implementation
-        required: true
-        type: choice
-        options: [quic-go, msquic]
-      client_implementation:
-        description: Client implementation
-        required: true
-        type: choice
-        options: [quic-go, msquic]
 
 permissions:
   contents: read
@@ -225,10 +215,17 @@ jobs:
           if-no-files-found: ignore
 
   benchmark:
-    name: Benchmark
+    name: ${{ matrix.client_implementation }} client → ${{ matrix.server_implementation }} server
     needs: create-node
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      # All benchmarks share the same nodes and UDP port.
+      max-parallel: 1
+      matrix:
+        server_implementation: [quic-go, msquic]
+        client_implementation: [quic-go, msquic]
     steps:
       - uses: actions/checkout@v7
 
@@ -274,39 +271,56 @@ jobs:
             --identity-file "${RUNNER_TEMP}/quic-perf" \
             --server-host "${{ steps.nodes.outputs.server_ip }}" \
             --client-host "${{ steps.nodes.outputs.client_ip }}" \
-            --server-implementation "${{ inputs.server_implementation }}" \
-            --client-implementation "${{ inputs.client_implementation }}" \
+            --server-implementation "${{ matrix.server_implementation }}" \
+            --client-implementation "${{ matrix.client_implementation }}" \
             > "${RUNNER_TEMP}/benchmark-result.json"
 
       - name: Upload benchmark result
         uses: actions/upload-artifact@v7
         with:
-          name: benchmark-result
+          name: benchmark-result-${{ matrix.client_implementation }}-${{ matrix.server_implementation }}
           path: ${{ runner.temp }}/benchmark-result.json
           if-no-files-found: error
 
+  summary:
+    name: Benchmark summary
+    needs: benchmark
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          pattern: benchmark-result-*
+          path: ${{ runner.temp }}/benchmark-results
+
       - name: Write benchmark summary
-        if: always()
         run: |
-          cat >> "${GITHUB_STEP_SUMMARY}" <<'EOF'
+          {
+            cat <<'EOF'
           ## Benchmark Results
 
-          | Node | Provider | Location | Public IP | Implementation |
-          | --- | --- | --- | --- | --- |
-          | Server | ${{ steps.nodes.outputs.server_provider }} | ${{ steps.nodes.outputs.server_location }} | ${{ steps.nodes.outputs.server_ip }} | ${{ inputs.server_implementation }} |
-          | Client | ${{ steps.nodes.outputs.client_provider }} | ${{ steps.nodes.outputs.client_location }} | ${{ steps.nodes.outputs.client_ip }} | ${{ inputs.client_implementation }} |
+          | Node | Location |
+          | --- | --- |
+          | Server | ${{ inputs.server_location }} |
+          | Client | ${{ inputs.client_location }} |
 
+          | Client | Server | Result | Upload bytes | Upload bits/s | Download bytes | Download bits/s |
+          | --- | --- | --- | ---: | ---: | ---: | ---: |
           EOF
-          if [ -s "${RUNNER_TEMP}/benchmark-result.json" ]; then
-            jq -r '
-              "| Direction | Bytes | Bits per second |",
-              "| --- | ---: | ---: |",
-              "| Upload | \(.upload_bytes) | \(.upload_bits_per_second) |",
-              "| Download | \(.download_bytes) | \(.download_bits_per_second) |"
-            ' "${RUNNER_TEMP}/benchmark-result.json" >> "${GITHUB_STEP_SUMMARY}"
-          else
-            echo "Benchmark failed or did not run." >> "${GITHUB_STEP_SUMMARY}"
-          fi
+            for server in quic-go msquic; do
+              for client in quic-go msquic; do
+                result="${RUNNER_TEMP}/benchmark-results/benchmark-result-${client}-${server}/benchmark-result.json"
+                if [ -s "${result}" ]; then
+                  jq -r --arg client "${client}" --arg server "${server}" \
+                    '"| \($client) | \($server) | ok | \(.upload_bytes) | \(.upload_bits_per_second) | \(.download_bytes) | \(.download_bits_per_second) |"' \
+                    "${result}"
+                else
+                  echo "| ${client} | ${server} | failed | | | | |"
+                fi
+              done
+            done
+          } >> "${GITHUB_STEP_SUMMARY}"
 
   destroy-node:
     name: Destroy ${{ matrix.role }} node
