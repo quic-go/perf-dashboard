@@ -3,22 +3,125 @@ name: Run benchmark
 on:
   workflow_dispatch:
     inputs:
-      server_cloud_provider:
-        description: Server node cloud provider
-        required: true
-        type: choice
-        options: [aws, gcp, azure]
       server_location:
-        description: Server node AWS region, GCP zone, or Azure region
-        required: true
-      client_cloud_provider:
-        description: Client node cloud provider
+        description: Server cloud provider and location
         required: true
         type: choice
-        options: [aws, gcp, azure]
+        # Standard-access locations supported by the configured VM types; GCP requires a zone.
+        options: &locations
+          - aws / us-west-2
+          - aws / ap-northeast-1
+          - aws / ap-northeast-2
+          - aws / ap-northeast-3
+          - aws / ap-south-1
+          - aws / ap-southeast-1
+          - aws / ap-southeast-2
+          - aws / ca-central-1
+          - aws / eu-central-1
+          - aws / eu-north-1
+          - aws / eu-west-1
+          - aws / eu-west-2
+          - aws / eu-west-3
+          - aws / sa-east-1
+          - aws / us-east-1
+          - aws / us-east-2
+          - aws / us-west-1
+          - gcp / africa-south1-a
+          - gcp / asia-east1-a
+          - gcp / asia-east2-a
+          - gcp / asia-northeast1-a
+          - gcp / asia-northeast2-a
+          - gcp / asia-northeast3-a
+          - gcp / asia-south1-a
+          - gcp / asia-south2-a
+          - gcp / asia-southeast1-a
+          - gcp / asia-southeast2-a
+          - gcp / australia-southeast1-a
+          - gcp / australia-southeast2-a
+          - gcp / europe-central2-a
+          - gcp / europe-north1-a
+          - gcp / europe-north2-a
+          - gcp / europe-southwest1-a
+          - gcp / europe-west1-b
+          - gcp / europe-west2-a
+          - gcp / europe-west3-a
+          - gcp / europe-west4-a
+          - gcp / europe-west6-a
+          - gcp / europe-west8-a
+          - gcp / europe-west9-a
+          - gcp / europe-west10-a
+          - gcp / europe-west12-a
+          - gcp / me-central1-a
+          - gcp / me-central2-a
+          - gcp / me-west1-a
+          - gcp / northamerica-northeast1-a
+          - gcp / northamerica-northeast2-a
+          - gcp / northamerica-south1-a
+          - gcp / southamerica-east1-a
+          - gcp / southamerica-west1-a
+          - gcp / us-central1-a
+          - gcp / us-east1-b
+          - gcp / us-east4-a
+          - gcp / us-east5-a
+          - gcp / us-south1-a
+          - gcp / us-west1-a
+          - gcp / us-west2-a
+          - gcp / us-west3-a
+          - gcp / us-west4-a
+          - azure / australiacentral
+          - azure / australiaeast
+          - azure / australiasoutheast
+          - azure / austriaeast
+          - azure / belgiumcentral
+          - azure / brazilsouth
+          - azure / canadacentral
+          - azure / canadaeast
+          - azure / centralindia
+          - azure / centralus
+          - azure / chilecentral
+          - azure / denmarkeast
+          - azure / eastasia
+          - azure / eastus
+          - azure / eastus2
+          - azure / francecentral
+          - azure / germanywestcentral
+          - azure / indiasouthcentral
+          - azure / indonesiacentral
+          - azure / israelcentral
+          - azure / italynorth
+          - azure / japaneast
+          - azure / japanwest
+          - azure / koreacentral
+          - azure / koreasouth
+          - azure / malaysiawest
+          - azure / mexicocentral
+          - azure / newzealandnorth
+          - azure / northcentralus
+          - azure / northeurope
+          - azure / norwayeast
+          - azure / polandcentral
+          - azure / qatarcentral
+          - azure / southafricanorth
+          - azure / southcentralus
+          - azure / southindia
+          - azure / southeastasia
+          - azure / spaincentral
+          - azure / swedencentral
+          - azure / switzerlandnorth
+          - azure / uaenorth
+          - azure / uksouth
+          - azure / ukwest
+          - azure / westcentralus
+          - azure / westeurope
+          - azure / westindia
+          - azure / westus
+          - azure / westus2
+          - azure / westus3
       client_location:
-        description: Client node AWS region, GCP zone, or Azure region
+        description: Client cloud provider and location
         required: true
+        type: choice
+        options: *locations
       server_implementation:
         description: Server implementation
         required: true
@@ -56,32 +159,39 @@ jobs:
       matrix:
         include:
           - role: server
-            cloud_provider: ${{ inputs.server_cloud_provider }}
-            location: ${{ inputs.server_location }}
-            name: quic-perf-${{ inputs.server_cloud_provider }}-server-${{ github.run_id }}-${{ github.run_attempt }}
+            target: ${{ inputs.server_location }}
           - role: client
-            cloud_provider: ${{ inputs.client_cloud_provider }}
-            location: ${{ inputs.client_location }}
-            name: quic-perf-${{ inputs.client_cloud_provider }}-client-${{ github.run_id }}-${{ github.run_attempt }}
+            target: ${{ inputs.client_location }}
     steps:
+      - &resolve_location
+        name: Resolve cloud location
+        id: target
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          read -r provider separator location <<< "${TARGET}"
+          [[ "${separator}" == / && "${provider}" =~ ^(aws|gcp|azure)$ && "${location}" =~ ^[a-z0-9-]+$ ]]
+          echo "provider=${provider}" >> "${GITHUB_OUTPUT}"
+          echo "location=${location}" >> "${GITHUB_OUTPUT}"
+
       - uses: actions/checkout@v7
 
       - name: Configure AWS credentials
-        if: matrix.cloud_provider == 'aws'
+        if: steps.target.outputs.provider == 'aws'
         uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
         with:
           aws-region: us-west-2
           role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
 
       - name: Authenticate to GCP
-        if: matrix.cloud_provider == 'gcp'
+        if: steps.target.outputs.provider == 'gcp'
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
         with:
           workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ vars.GCP_PACKER_SERVICE_ACCOUNT }}
 
       - name: Authenticate to Azure
-        if: matrix.cloud_provider == 'azure'
+        if: steps.target.outputs.provider == 'azure'
         uses: azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v3.0.2
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
@@ -102,9 +212,9 @@ jobs:
         uses: ./.github/actions/create-node
         with:
           role: ${{ matrix.role }}
-          cloud_provider: ${{ matrix.cloud_provider }}
-          location: ${{ matrix.location }}
-          name: ${{ matrix.name }}
+          cloud_provider: ${{ steps.target.outputs.provider }}
+          location: ${{ steps.target.outputs.location }}
+          name: quic-perf-${{ steps.target.outputs.provider }}-${{ matrix.role }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - uses: actions/upload-artifact@v7
         if: always()
@@ -144,7 +254,11 @@ jobs:
           client_state="${RUNNER_TEMP}/client-node/terraform.tfstate"
           server_node="$(terraform output -state="${server_state}" -json node)"
           client_node="$(terraform output -state="${client_state}" -json node)"
+          jq -r '"server_provider=\(.provider)"' <<< "${server_node}" >> "${GITHUB_OUTPUT}"
+          jq -r '"server_location=\(.location)"' <<< "${server_node}" >> "${GITHUB_OUTPUT}"
           jq -r '"server_ip=\(.public_ip)"' <<< "${server_node}" >> "${GITHUB_OUTPUT}"
+          jq -r '"client_provider=\(.provider)"' <<< "${client_node}" >> "${GITHUB_OUTPUT}"
+          jq -r '"client_location=\(.location)"' <<< "${client_node}" >> "${GITHUB_OUTPUT}"
           jq -r '"client_ip=\(.public_ip)"' <<< "${client_node}" >> "${GITHUB_OUTPUT}"
 
       - name: Install SSH key
@@ -179,8 +293,8 @@ jobs:
 
           | Node | Provider | Location | Public IP | Implementation |
           | --- | --- | --- | --- | --- |
-          | Server | ${{ inputs.server_cloud_provider }} | ${{ inputs.server_location }} | ${{ steps.nodes.outputs.server_ip }} | ${{ inputs.server_implementation }} |
-          | Client | ${{ inputs.client_cloud_provider }} | ${{ inputs.client_location }} | ${{ steps.nodes.outputs.client_ip }} | ${{ inputs.client_implementation }} |
+          | Server | ${{ steps.nodes.outputs.server_provider }} | ${{ steps.nodes.outputs.server_location }} | ${{ steps.nodes.outputs.server_ip }} | ${{ inputs.server_implementation }} |
+          | Client | ${{ steps.nodes.outputs.client_provider }} | ${{ steps.nodes.outputs.client_location }} | ${{ steps.nodes.outputs.client_ip }} | ${{ inputs.client_implementation }} |
 
           EOF
           if [ -s "${RUNNER_TEMP}/benchmark-result.json" ]; then
@@ -205,14 +319,12 @@ jobs:
       matrix:
         include:
           - role: server
-            cloud_provider: ${{ inputs.server_cloud_provider }}
-            location: ${{ inputs.server_location }}
-            name: quic-perf-${{ inputs.server_cloud_provider }}-server-${{ github.run_id }}-${{ github.run_attempt }}
+            target: ${{ inputs.server_location }}
           - role: client
-            cloud_provider: ${{ inputs.client_cloud_provider }}
-            location: ${{ inputs.client_location }}
-            name: quic-perf-${{ inputs.client_cloud_provider }}-client-${{ github.run_id }}-${{ github.run_attempt }}
+            target: ${{ inputs.client_location }}
     steps:
+      - *resolve_location
+
       - uses: actions/checkout@v7
 
       - uses: actions/download-artifact@v8
@@ -222,21 +334,21 @@ jobs:
           path: ${{ runner.temp }}/${{ matrix.role }}-artifact
 
       - name: Configure AWS credentials
-        if: matrix.cloud_provider == 'aws'
+        if: steps.target.outputs.provider == 'aws'
         uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
         with:
           aws-region: us-west-2
           role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
 
       - name: Authenticate to GCP
-        if: matrix.cloud_provider == 'gcp'
+        if: steps.target.outputs.provider == 'gcp'
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
         with:
           workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ vars.GCP_PACKER_SERVICE_ACCOUNT }}
 
       - name: Authenticate to Azure
-        if: matrix.cloud_provider == 'azure'
+        if: steps.target.outputs.provider == 'azure'
         uses: azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v3.0.2
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
@@ -256,6 +368,7 @@ jobs:
         run: |
           state="${{ runner.temp }}/${{ matrix.role }}-artifact/terraform.tfstate"
           [ -f "${state}" ] || exit 0
-          terraform -chdir=infra/${{ matrix.cloud_provider }} init -input=false
-          TF_VAR_name="${{ matrix.name }}" TF_VAR_location="${{ matrix.location }}" \
-            terraform -chdir=infra/${{ matrix.cloud_provider }} destroy -state="${state}" -input=false -auto-approve
+          terraform -chdir=infra/${{ steps.target.outputs.provider }} init -input=false
+          TF_VAR_name="quic-perf-${{ steps.target.outputs.provider }}-${{ matrix.role }}-${{ github.run_id }}-${{ github.run_attempt }}" \
+            TF_VAR_location="${{ steps.target.outputs.location }}" \
+            terraform -chdir=infra/${{ steps.target.outputs.provider }} destroy -state="${state}" -input=false -auto-approve
