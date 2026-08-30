@@ -144,59 +144,32 @@ jobs:
           client_state="${RUNNER_TEMP}/client-node/terraform.tfstate"
           server_node="$(terraform output -state="${server_state}" -json node)"
           client_node="$(terraform output -state="${client_state}" -json node)"
-          jq -r '"server_ip=\(.public_ip)\nserver_user=\(.user)"' <<< "${server_node}" >> "${GITHUB_OUTPUT}"
-          jq -r '"client_ip=\(.public_ip)\nclient_user=\(.user)"' <<< "${client_node}" >> "${GITHUB_OUTPUT}"
+          jq -r '"server_ip=\(.public_ip)"' <<< "${server_node}" >> "${GITHUB_OUTPUT}"
+          jq -r '"client_ip=\(.public_ip)"' <<< "${client_node}" >> "${GITHUB_OUTPUT}"
 
       - name: Install SSH key
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY_PRIMARY }}
         run: |
-          install -d -m 0700 ~/.ssh
-          printf '%b\n' "${SSH_PRIVATE_KEY}" | sed 's/\r$//' > ~/.ssh/quic-perf
-          chmod 0600 ~/.ssh/quic-perf
-          cat > ~/.ssh/config <<'EOF'
-          Host *
-            IdentityFile ~/.ssh/quic-perf
-            StrictHostKeyChecking accept-new
-            ConnectionAttempts 60
-          EOF
-
-      - name: Start server
-        run: |
-          server="${{ steps.nodes.outputs.server_user }}@${{ steps.nodes.outputs.server_ip }}"
-          if [ "${{ inputs.server_implementation }}" = "quic-go" ]; then
-            ssh "${server}" 'nohup /opt/quic-go/perf/quic-go-perf --run-server --server-address=0.0.0.0:4433 >/tmp/quic-go-server.log 2>&1 & echo $! >/tmp/benchmark-server.pid'
-          else
-            ssh "${server}" 'nohup /opt/msquic/build/bin/Release/secnetperf -exec:maxtput -bind:0.0.0.0 >/tmp/msquic-server.log 2>&1 & echo $! >/tmp/benchmark-server.pid'
-          fi
-          sleep 3
+          printf '%b\n' "${SSH_PRIVATE_KEY}" | sed 's/\r$//' > "${RUNNER_TEMP}/quic-perf"
+          chmod 0600 "${RUNNER_TEMP}/quic-perf"
 
       - name: Run benchmark
-        id: benchmark
         run: |
-          client="${{ steps.nodes.outputs.client_user }}@${{ steps.nodes.outputs.client_ip }}"
-          status=0
-          if [ "${{ inputs.client_implementation }}" = "quic-go" ]; then
-            ssh "${client}" \
-              /opt/quic-go/perf/quic-go-perf \
-              --server-address=${{ steps.nodes.outputs.server_ip }}:4433 \
-              --upload-bytes=1000000000 --download-bytes=1000000000 \
-              > "${RUNNER_TEMP}/benchmark.log" 2>&1 || status=$?
-          else
-            ssh "${client}" \
-              /opt/msquic/build/bin/Release/secnetperf \
-              -target:${{ steps.nodes.outputs.server_ip }} -port:4433 \
-              -exec:maxtput -up:1000000000 -down:1000000000 -ptput:1 \
-              > "${RUNNER_TEMP}/benchmark.log" 2>&1 || status=$?
-          fi
-          echo "status=${status}" >> "${GITHUB_OUTPUT}"
-          exit "${status}"
+          python3 orchestrator/run_benchmark.py \
+            --identity-file "${RUNNER_TEMP}/quic-perf" \
+            --server-host "${{ steps.nodes.outputs.server_ip }}" \
+            --client-host "${{ steps.nodes.outputs.client_ip }}" \
+            --server-implementation "${{ inputs.server_implementation }}" \
+            --client-implementation "${{ inputs.client_implementation }}" \
+            > "${RUNNER_TEMP}/benchmark-result.json"
 
-      - name: Stop server
-        if: always()
-        run: |
-          server="${{ steps.nodes.outputs.server_user }}@${{ steps.nodes.outputs.server_ip }}"
-          ssh "${server}" 'kill "$(cat /tmp/benchmark-server.pid)" 2>/dev/null || true'
+      - name: Upload benchmark result
+        uses: actions/upload-artifact@v7
+        with:
+          name: benchmark-result
+          path: ${{ runner.temp }}/benchmark-result.json
+          if-no-files-found: error
 
       - name: Write benchmark summary
         if: always()
@@ -209,18 +182,17 @@ jobs:
           | Server | ${{ inputs.server_cloud_provider }} | ${{ inputs.server_location }} | ${{ steps.nodes.outputs.server_ip }} | ${{ inputs.server_implementation }} |
           | Client | ${{ inputs.client_cloud_provider }} | ${{ inputs.client_location }} | ${{ steps.nodes.outputs.client_ip }} | ${{ inputs.client_implementation }} |
 
-          Upload: 1 GB
-
-          Download: 1 GB
-
-          Result: ${{ steps.benchmark.outputs.status || 'not run' }}
-
-          ```text
           EOF
-          if [ -f "${RUNNER_TEMP}/benchmark.log" ]; then
-            tail -n 200 "${RUNNER_TEMP}/benchmark.log" >> "${GITHUB_STEP_SUMMARY}"
+          if [ -s "${RUNNER_TEMP}/benchmark-result.json" ]; then
+            jq -r '
+              "| Direction | Bytes | Bits per second |",
+              "| --- | ---: | ---: |",
+              "| Upload | \(.upload_bytes) | \(.upload_bits_per_second) |",
+              "| Download | \(.download_bytes) | \(.download_bits_per_second) |"
+            ' "${RUNNER_TEMP}/benchmark-result.json" >> "${GITHUB_STEP_SUMMARY}"
+          else
+            echo "Benchmark failed or did not run." >> "${GITHUB_STEP_SUMMARY}"
           fi
-          echo '```' >> "${GITHUB_STEP_SUMMARY}"
 
   destroy-node:
     name: Destroy ${{ matrix.role }} node
