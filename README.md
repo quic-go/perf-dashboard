@@ -2,12 +2,12 @@
 
 Infrastructure for running and publishing quic-go performance benchmarks.
 
-The setup keeps runs repeatable by building AWS, GCP, and Azure runner images up front with [quic-go/perf](https://github.com/quic-go/perf) and [MsQuic](https://github.com/microsoft/msquic) installed. Each benchmark then creates short-lived server and client nodes from those images, runs the selected implementations, and destroys the nodes afterward.
+The setup keeps runs repeatable by building AWS, GCP, and Azure runner images up front with [quic-go/perf](https://github.com/quic-go/perf) and [MsQuic](https://github.com/microsoft/msquic) installed. Each benchmark then creates short-lived server and client nodes from those images, runs every quic-go and MsQuic client/server pairing, and destroys the nodes afterward.
 
 ## Workflows
 
 - [`.github/workflows/packer.yml`](.github/workflows/packer.yml) builds new runner images on AWS, GCP and Azure.
-- [`.github/workflows/benchmark.yml`](.github/workflows/benchmark.yml) creates temporary server and client nodes, runs the selected benchmark.
+- [`.github/workflows/benchmark.yml`](.github/workflows/benchmark.yml) creates temporary server and client nodes and runs the implementation matrix.
 - [`.github/workflows/cleanup.yml`](.github/workflows/cleanup.yml) deletes old runner images and abandoned benchmark resources.
 
 ## Testing image builds from a Pull Request
