@@ -305,16 +305,27 @@ jobs:
           | Server | ${{ inputs.server_location }} |
           | Client | ${{ inputs.client_location }} |
 
-          | Client | Server | Result | Upload bytes | Upload bits/s | Download bytes | Download bits/s |
+          | Client | Server | Result | Upload size (MB) | Upload rate (Mbit/s) | Download size (MB) | Download rate (Mbit/s) |
           | --- | --- | --- | ---: | ---: | ---: | ---: |
           EOF
             for server in quic-go msquic; do
               for client in quic-go msquic; do
                 result="${RUNNER_TEMP}/benchmark-results/benchmark-result-${client}-${server}/benchmark-result.json"
                 if [ -s "${result}" ]; then
-                  jq -r --arg client "${client}" --arg server "${server}" \
-                    '"| \($client) | \($server) | ok | \(.upload_bytes) | \(.upload_bits_per_second) | \(.download_bytes) | \(.download_bits_per_second) |"' \
-                    "${result}"
+                  read -r upload_size upload_rate download_size download_rate < <(
+                    jq -r '
+                      [
+                        .upload_bytes,
+                        .upload_bits_per_second,
+                        .download_bytes,
+                        .download_bits_per_second
+                      ] | @tsv
+                    ' "${result}" |
+                      LC_ALL=en_US.UTF-8 numfmt \
+                        --delimiter=$'\t' --field=1-4 \
+                        --grouping --to-unit=1000000 --round=nearest
+                  )
+                  echo "| ${client} | ${server} | ok | ${upload_size} | ${upload_rate} | ${download_size} | ${download_rate} |"
                 else
                   echo "| ${client} | ${server} | failed | | | | |"
                 fi
