@@ -1,3 +1,8 @@
+data "google_compute_image" "runner" {
+  family  = "quic-perf-runner"
+  project = var.gcp_project_id
+}
+
 resource "google_compute_instance" "node" {
   name         = var.name
   machine_type = "e2-medium"
@@ -13,7 +18,7 @@ resource "google_compute_instance" "node" {
     auto_delete = true
 
     initialize_params {
-      image = "projects/${var.gcp_project_id}/global/images/family/quic-perf-runner"
+      image = data.google_compute_image.runner.self_link
       size  = 20
       type  = "pd-balanced"
     }
