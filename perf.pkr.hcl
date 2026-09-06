@@ -244,16 +244,14 @@ build {
   }
 
   provisioner "shell" {
-    execute_command  = "sudo {{ .Vars }} {{ .Path }}"
     environment_vars = ["BUILD_COMMIT=${var.build_commit}"]
     inline = [<<-EOF
-      mkdir -p /opt/quic-perf
       jq -n \
         --arg built_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
         --arg build_commit "$BUILD_COMMIT" \
-        --arg perf_commit "$(git -C /opt/quic-go/perf rev-parse HEAD)" \
-        --arg quic_go_commit "$(git -C /opt/quic-go/quic-go rev-parse HEAD)" \
-        --arg msquic_commit "$(git -C /opt/msquic rev-parse HEAD)" \
+        --arg perf_commit "$(sudo git -C /opt/quic-go/perf rev-parse HEAD)" \
+        --arg quic_go_commit "$(sudo git -C /opt/quic-go/quic-go rev-parse HEAD)" \
+        --arg msquic_commit "$(sudo git -C /opt/msquic rev-parse HEAD)" \
         --arg go_version "$(go version /opt/quic-go/perf/quic-go-perf | awk '{print $NF}')" \
         --arg cxx_version "$(c++ -dumpfullversion -dumpversion)" \
         '{
@@ -264,7 +262,7 @@ build {
             "quic-go": {commit: $quic_go_commit, perf_commit: $perf_commit, go_version: $go_version},
             "msquic": {commit: $msquic_commit, cxx_version: $cxx_version}
           }
-        }' > /opt/quic-perf/build-info.json
+        }' | sudo tee /home/perf/build-info.json >/dev/null
     EOF
     ]
   }

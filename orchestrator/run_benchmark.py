@@ -80,7 +80,7 @@ def main() -> int:
         build_info = {}
         for role, node in (("server", server), ("client", client)):
             metadata = node.run(
-                ("cat", "/opt/quic-perf/build-info.json"),
+                ("cat", "/home/perf/build-info.json"),
                 capture_output=True,
                 timeout=10,
             )
