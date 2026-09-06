@@ -299,6 +299,7 @@ jobs:
                 if [ -s "${result}" ]; then
                   read -r upload_size upload_rate download_size download_rate < <(
                     jq -r '
+                      .measurements |
                       [
                         .upload_bytes,
                         .upload_bits_per_second,

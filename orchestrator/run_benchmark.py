@@ -5,6 +5,7 @@ import sys
 import tempfile
 import time
 from dataclasses import asdict
+from datetime import datetime, timezone
 from pathlib import Path
 
 from msquic import MsQuicImplementation
@@ -59,6 +60,7 @@ def main() -> int:
     server_implementation = implementations[args.server_implementation]()
     client_implementation = implementations[args.client_implementation]()
 
+    started_at = datetime.now(timezone.utc).isoformat()
     with tempfile.TemporaryDirectory(prefix="quic-perf-") as temporary_directory:
         known_hosts_file = Path(temporary_directory) / "known_hosts"
         server = SSHNode(
@@ -97,7 +99,20 @@ def main() -> int:
         finally:
             server_implementation.stop_server(server)
 
-    print(json.dumps({**asdict(result), "build_info": build_info}, sort_keys=True))
+    record = {
+        "test": "throughput",
+        "client_implementation": args.client_implementation,
+        "server_implementation": args.server_implementation,
+        "started_at": started_at,
+        "status": "success",
+        "parameters": {
+            "upload_bytes": args.upload_bytes,
+            "download_bytes": args.download_bytes,
+        },
+        "build_info": build_info,
+        "measurements": asdict(result),
+    }
+    print(json.dumps(record, sort_keys=True))
     return 0
 
 
