@@ -198,7 +198,6 @@ jobs:
           terraform_wrapper: false
 
       - name: Create node
-        id: node
         uses: ./.github/actions/create-node
         with:
           role: ${{ matrix.role }}
