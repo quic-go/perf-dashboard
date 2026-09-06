@@ -33,3 +33,5 @@ runs:
         cp -R "${GITHUB_WORKSPACE}/infra/${CLOUD_PROVIDER}/." "${node_dir}/"
         terraform -chdir="${node_dir}" init -input=false
         terraform -chdir="${node_dir}" apply -input=false -auto-approve
+
+        terraform -chdir="${node_dir}" output -json node > "${node_dir}/node.json"

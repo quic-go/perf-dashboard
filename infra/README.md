@@ -21,4 +21,4 @@ Provider variables:
 
 Outputs:
 
-- `node`: provider, location, name, public IP, and SSH user.
+- `node`: provider, region, zone, machine type, image ID, and public IP.
