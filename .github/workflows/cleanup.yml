@@ -23,6 +23,7 @@ jobs:
     concurrency:
       group: cloud-aws
       cancel-in-progress: false
+      queue: max
     steps:
       - name: Configure AWS
         uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
@@ -123,6 +124,7 @@ jobs:
     concurrency:
       group: cloud-gcp
       cancel-in-progress: false
+      queue: max
     env:
       CLOUDSDK_CORE_PROJECT: ${{ vars.GCP_PROJECT_ID }}
     steps:
@@ -184,6 +186,7 @@ jobs:
     concurrency:
       group: cloud-azure
       cancel-in-progress: false
+      queue: max
     steps:
       - name: Authenticate to Azure
         uses: azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v3.0.2

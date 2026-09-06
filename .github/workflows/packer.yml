@@ -56,6 +56,7 @@ jobs:
     concurrency:
       group: cloud-gcp
       cancel-in-progress: false
+      queue: max
     permissions:
       contents: read
       id-token: write
@@ -107,6 +108,7 @@ jobs:
     concurrency:
       group: cloud-aws
       cancel-in-progress: false
+      queue: max
     permissions:
       contents: read
       id-token: write
@@ -164,6 +166,7 @@ jobs:
     concurrency:
       group: cloud-azure
       cancel-in-progress: false
+      queue: max
     permissions:
       contents: read
       id-token: write
