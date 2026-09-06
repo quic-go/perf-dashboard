@@ -77,6 +77,14 @@ def main() -> int:
         )
         server.wait_for_ssh()
         client.wait_for_ssh()
+        build_info = {}
+        for role, node in (("server", server), ("client", client)):
+            metadata = node.run(
+                ("cat", "/opt/quic-perf/build-info.json"),
+                capture_output=True,
+                timeout=10,
+            )
+            build_info[role] = json.loads(metadata.stdout)
         try:
             server_implementation.start_server(server)
             time.sleep(3)
@@ -89,7 +97,7 @@ def main() -> int:
         finally:
             server_implementation.stop_server(server)
 
-    print(json.dumps(asdict(result), sort_keys=True))
+    print(json.dumps({**asdict(result), "build_info": build_info}, sort_keys=True))
     return 0
 
 

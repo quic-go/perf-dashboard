@@ -25,6 +25,11 @@ variable "go_version" {
   default     = "1.26.2"
 }
 
+variable "build_commit" {
+  type        = string
+  description = "perf-dashboard commit used to build the image"
+}
+
 variable "gcp_project_id" {
   type        = string
   description = "GCP project ID"
@@ -169,7 +174,7 @@ build {
     environment_vars = ["DEBIAN_FRONTEND=noninteractive"]
     inline = [
       "echo '=== Updating package list and installing base packages ==='",
-      "sudo apt-get update && sudo apt-get install -y ca-certificates curl git",
+      "sudo apt-get update && sudo apt-get install -y ca-certificates curl git jq",
     ]
   }
 
@@ -235,6 +240,32 @@ build {
       "sudo mkdir -p /opt/msquic/build",
       "cd /opt/msquic/build && sudo cmake -G 'Unix Makefiles' -DQUIC_BUILD_PERF=ON ..",
       "sudo make -C /opt/msquic/build",
+    ]
+  }
+
+  provisioner "shell" {
+    execute_command  = "sudo {{ .Vars }} {{ .Path }}"
+    environment_vars = ["BUILD_COMMIT=${var.build_commit}"]
+    inline = [<<-EOF
+      mkdir -p /opt/quic-perf
+      jq -n \
+        --arg built_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        --arg build_commit "$BUILD_COMMIT" \
+        --arg perf_commit "$(git -C /opt/quic-go/perf rev-parse HEAD)" \
+        --arg quic_go_commit "$(git -C /opt/quic-go/quic-go rev-parse HEAD)" \
+        --arg msquic_commit "$(git -C /opt/msquic rev-parse HEAD)" \
+        --arg go_version "$(go version /opt/quic-go/perf/quic-go-perf | awk '{print $NF}')" \
+        --arg cxx_version "$(c++ -dumpfullversion -dumpversion)" \
+        '{
+          schema_version: 1,
+          built_at: $built_at,
+          perf_dashboard_commit: $build_commit,
+          implementations: {
+            "quic-go": {commit: $quic_go_commit, perf_commit: $perf_commit, go_version: $go_version},
+            "msquic": {commit: $msquic_commit, cxx_version: $cxx_version}
+          }
+        }' > /opt/quic-perf/build-info.json
+    EOF
     ]
   }
 

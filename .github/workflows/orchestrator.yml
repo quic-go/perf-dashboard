@@ -44,6 +44,8 @@ jobs:
           version: "1.15.2"
 
       - name: Build runner image
+        env:
+          PKR_VAR_build_commit: ${{ github.sha }}
         run: |
           packer init .
           packer build -only=docker.ubuntu -var "ssh_public_key_primary=$(cat "${RUNNER_TEMP}/quic-perf.pub")" .
