@@ -274,51 +274,39 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v7
+
       - uses: actions/download-artifact@v8
-        continue-on-error: true
         with:
           pattern: benchmark-result-*
-          path: ${{ runner.temp }}/benchmark-results
+          path: ${{ runner.temp }}/benchmark-artifacts
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: "*-node"
+          path: ${{ runner.temp }}/benchmark-artifacts
+
+      - name: Write benchmark report
+        run: |
+          python3 .github/scripts/benchmark_report.py \
+            "${RUNNER_TEMP}/benchmark-artifacts" \
+            --run-id "${GITHUB_RUN_ID}" \
+            --attempt "${GITHUB_RUN_ATTEMPT}" \
+            --url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT}" \
+            > "${RUNNER_TEMP}/benchmark-report.json"
+
+      - name: Upload benchmark report
+        uses: actions/upload-artifact@v7
+        with:
+          name: benchmark-report
+          path: ${{ runner.temp }}/benchmark-report.json
+          if-no-files-found: error
 
       - name: Write benchmark summary
         run: |
-          {
-            cat <<'EOF'
-          ## Benchmark Results
-
-          | Node | Location |
-          | --- | --- |
-          | Server | ${{ inputs.server_location }} |
-          | Client | ${{ inputs.client_location }} |
-
-          | Client | Server | Result | Upload size (MB) | Upload rate (Mbit/s) | Download size (MB) | Download rate (Mbit/s) |
-          | --- | --- | --- | ---: | ---: | ---: | ---: |
-          EOF
-            for server in quic-go msquic; do
-              for client in quic-go msquic; do
-                result="${RUNNER_TEMP}/benchmark-results/benchmark-result-${client}-${server}/benchmark-result.json"
-                if [ -s "${result}" ] && jq -e '.status == "success"' "${result}" >/dev/null; then
-                  read -r upload_size upload_rate download_size download_rate < <(
-                    jq -r '
-                      .measurements |
-                      [
-                        .upload_bytes,
-                        .upload_bits_per_second,
-                        .download_bytes,
-                        .download_bits_per_second
-                      ] | @tsv
-                    ' "${result}" |
-                      LC_ALL=en_US.UTF-8 numfmt \
-                        --delimiter=$'\t' --field=1-4 \
-                        --grouping --to-unit=1000000 --round=nearest
-                  )
-                  echo "| ${client} | ${server} | ok | ${upload_size} | ${upload_rate} | ${download_size} | ${download_rate} |"
-                else
-                  echo "| ${client} | ${server} | failed | | | | |"
-                fi
-              done
-            done
-          } >> "${GITHUB_STEP_SUMMARY}"
+          python3 .github/scripts/benchmark_summary.py \
+            "${RUNNER_TEMP}/benchmark-report.json" \
+            >> "${GITHUB_STEP_SUMMARY}"
 
   destroy-node:
     name: Destroy ${{ matrix.role }} node
