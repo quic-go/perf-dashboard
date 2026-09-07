@@ -261,6 +261,7 @@ jobs:
             > "${RUNNER_TEMP}/benchmark-result.json"
 
       - name: Upload benchmark result
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: benchmark-result-${{ matrix.client_implementation }}-${{ matrix.server_implementation }}
@@ -296,7 +297,7 @@ jobs:
             for server in quic-go msquic; do
               for client in quic-go msquic; do
                 result="${RUNNER_TEMP}/benchmark-results/benchmark-result-${client}-${server}/benchmark-result.json"
-                if [ -s "${result}" ]; then
+                if [ -s "${result}" ] && jq -e '.status == "success"' "${result}" >/dev/null; then
                   read -r upload_size upload_rate download_size download_rate < <(
                     jq -r '
                       .measurements |

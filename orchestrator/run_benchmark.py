@@ -60,7 +60,18 @@ def main() -> int:
     server_implementation = implementations[args.server_implementation]()
     client_implementation = implementations[args.client_implementation]()
 
-    started_at = datetime.now(timezone.utc).isoformat()
+    record = {
+        "test": "throughput",
+        "client_implementation": args.client_implementation,
+        "server_implementation": args.server_implementation,
+        "started_at": datetime.now(timezone.utc).isoformat(),
+        "status": "failed",
+        "parameters": {
+            "upload_bytes": args.upload_bytes,
+            "download_bytes": args.download_bytes,
+        },
+        "build_info": {},
+    }
     with tempfile.TemporaryDirectory(prefix="quic-perf-") as temporary_directory:
         known_hosts_file = Path(temporary_directory) / "known_hosts"
         server = SSHNode(
@@ -77,42 +88,31 @@ def main() -> int:
             identity_file,
             known_hosts_file,
         )
-        server.wait_for_ssh()
-        client.wait_for_ssh()
-        build_info = {}
-        for role, node in (("server", server), ("client", client)):
-            metadata = node.run(
-                ("cat", "/home/perf/build-info.json"),
-                capture_output=True,
-                timeout=10,
-            )
-            build_info[role] = json.loads(metadata.stdout)
         try:
-            server_implementation.start_server(server)
-            time.sleep(3)
-            result = client_implementation.run_throughput_test(
-                client,
-                args.server_address or args.server_host,
-                args.upload_bytes,
-                args.download_bytes,
-            )
+            server.wait_for_ssh()
+            client.wait_for_ssh()
+            for role, node in (("server", server), ("client", client)):
+                metadata = node.run(
+                    ("cat", "/home/perf/build-info.json"),
+                    capture_output=True,
+                    timeout=10,
+                )
+                record["build_info"][role] = json.loads(metadata.stdout)
+            try:
+                server_implementation.start_server(server)
+                time.sleep(3)
+                result = client_implementation.run_throughput_test(
+                    client,
+                    args.server_address or args.server_host,
+                    args.upload_bytes,
+                    args.download_bytes,
+                )
+            finally:
+                server_implementation.stop_server(server)
+            record["measurements"] = asdict(result)
+            record["status"] = "success"
         finally:
-            server_implementation.stop_server(server)
-
-    record = {
-        "test": "throughput",
-        "client_implementation": args.client_implementation,
-        "server_implementation": args.server_implementation,
-        "started_at": started_at,
-        "status": "success",
-        "parameters": {
-            "upload_bytes": args.upload_bytes,
-            "download_bytes": args.download_bytes,
-        },
-        "build_info": build_info,
-        "measurements": asdict(result),
-    }
-    print(json.dumps(record, sort_keys=True))
+            print(json.dumps(record, sort_keys=True))
     return 0
 
 
