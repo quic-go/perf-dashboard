@@ -278,12 +278,6 @@ jobs:
 
       - uses: actions/download-artifact@v8
         with:
-          pattern: benchmark-result-*
-          path: ${{ runner.temp }}/benchmark-artifacts
-
-      - uses: actions/download-artifact@v8
-        with:
-          pattern: "*-node"
           path: ${{ runner.temp }}/benchmark-artifacts
 
       - name: Write benchmark report
