@@ -2,7 +2,8 @@ import io
 import json
 import unittest
 from contextlib import redirect_stdout
-from unittest.mock import patch
+from pathlib import Path
+from unittest.mock import Mock, patch
 
 from msquic import _parse_result as parse_msquic_result
 from quic_go import _parse_result as parse_quic_go_result
@@ -17,8 +18,6 @@ class RunBenchmarkTest(unittest.TestCase):
             f"--identity-file={__file__}",
             "--server-host=server",
             "--client-host=client",
-            "--server-implementation=quic-go",
-            "--client-implementation=msquic",
         ]
         with (
             patch("sys.argv", args),
@@ -26,11 +25,29 @@ class RunBenchmarkTest(unittest.TestCase):
             redirect_stdout(io.StringIO()) as output,
             self.assertRaises(TimeoutError),
         ):
-            main()
+            main(Path("known_hosts"))
 
         record = json.loads(output.getvalue())
-        self.assertEqual(record["status"], "failed")
-        self.assertNotIn("measurements", record)
+        self.assertEqual(record["results"], [])
+
+    def test_continues_after_failure(self) -> None:
+        args = [
+            "run_benchmark.py",
+            f"--identity-file={__file__}",
+            "--server-host=server",
+            "--client-host=client",
+        ]
+        results = [{"status": "failed"}] + [{"status": "success"}] * 3
+        with (
+            patch("sys.argv", args),
+            patch.object(SSHNode, "wait_for_ssh"),
+            patch.object(SSHNode, "run", return_value=Mock(stdout="{}")),
+            patch("run_benchmark.run_pair", side_effect=results),
+            redirect_stdout(io.StringIO()) as output,
+        ):
+            self.assertEqual(main(Path("known_hosts")), 1)
+
+        self.assertEqual(json.loads(output.getvalue())["results"], results)
 
     def test_implementations(self) -> None:
         quic_go_output = """
