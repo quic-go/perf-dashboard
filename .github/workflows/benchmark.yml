@@ -216,17 +216,10 @@ jobs:
           if-no-files-found: ignore
 
   benchmark:
-    name: ${{ matrix.client_implementation }} client → ${{ matrix.server_implementation }} server
+    name: Run benchmarks
     needs: create-node
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      # All benchmarks share the same nodes and UDP port.
-      max-parallel: 1
-      matrix:
-        server_implementation: [quic-go, msquic]
-        client_implementation: [quic-go, msquic]
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
 
@@ -256,69 +249,24 @@ jobs:
             --identity-file "${RUNNER_TEMP}/quic-perf" \
             --server-host "${{ steps.nodes.outputs.server_ip }}" \
             --client-host "${{ steps.nodes.outputs.client_ip }}" \
-            --server-implementation "${{ matrix.server_implementation }}" \
-            --client-implementation "${{ matrix.client_implementation }}" \
             > "${RUNNER_TEMP}/benchmark-result.json"
 
       - name: Upload benchmark result
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: benchmark-result-${{ matrix.client_implementation }}-${{ matrix.server_implementation }}
+          name: benchmark-result
           path: ${{ runner.temp }}/benchmark-result.json
           if-no-files-found: error
 
-  summary:
-    name: Benchmark summary
-    needs: benchmark
-    if: always()
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/download-artifact@v8
-        continue-on-error: true
-        with:
-          pattern: benchmark-result-*
-          path: ${{ runner.temp }}/benchmark-results
-
       - name: Write benchmark summary
+        if: always()
         run: |
-          {
-            cat <<'EOF'
-          ## Benchmark Results
-
-          | Node | Location |
-          | --- | --- |
-          | Server | ${{ inputs.server_location }} |
-          | Client | ${{ inputs.client_location }} |
-
-          | Client | Server | Result | Upload size (MB) | Upload rate (Mbit/s) | Download size (MB) | Download rate (Mbit/s) |
-          | --- | --- | --- | ---: | ---: | ---: | ---: |
-          EOF
-            for server in quic-go msquic; do
-              for client in quic-go msquic; do
-                result="${RUNNER_TEMP}/benchmark-results/benchmark-result-${client}-${server}/benchmark-result.json"
-                if [ -s "${result}" ] && jq -e '.status == "success"' "${result}" >/dev/null; then
-                  read -r upload_size upload_rate download_size download_rate < <(
-                    jq -r '
-                      .measurements |
-                      [
-                        .upload_bytes,
-                        .upload_bits_per_second,
-                        .download_bytes,
-                        .download_bits_per_second
-                      ] | @tsv
-                    ' "${result}" |
-                      LC_ALL=en_US.UTF-8 numfmt \
-                        --delimiter=$'\t' --field=1-4 \
-                        --grouping --to-unit=1000000 --round=nearest
-                  )
-                  echo "| ${client} | ${server} | ok | ${upload_size} | ${upload_rate} | ${download_size} | ${download_rate} |"
-                else
-                  echo "| ${client} | ${server} | failed | | | | |"
-                fi
-              done
-            done
-          } >> "${GITHUB_STEP_SUMMARY}"
+          python3 .github/scripts/benchmark_summary.py \
+            "${RUNNER_TEMP}/benchmark-result.json" \
+            "${{ inputs.server_location }}" \
+            "${{ inputs.client_location }}" \
+            >> "${GITHUB_STEP_SUMMARY}"
 
   destroy-node:
     name: Destroy ${{ matrix.role }} node

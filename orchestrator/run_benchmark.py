@@ -1,7 +1,6 @@
 import argparse
 import json
-import subprocess
-import sys
+import logging
 import tempfile
 import time
 from dataclasses import asdict
@@ -10,7 +9,9 @@ from pathlib import Path
 
 from msquic import MsQuicImplementation
 from quic_go import QuicGoImplementation
-from quic_implementation import SSHNode
+from quic_implementation import QuicImplementation, SSHNode
+
+logger = logging.getLogger(__name__)
 
 
 def _positive_int(value: str) -> int:
@@ -27,8 +28,10 @@ def _port(value: str) -> int:
     return number
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description="Run one QUIC throughput benchmark")
+def main(known_hosts_file: Path) -> int:
+    parser = argparse.ArgumentParser(
+        description="Run all QUIC throughput benchmark pairings"
+    )
     parser.add_argument("--identity-file", required=True, type=Path)
     parser.add_argument("--server-host", required=True)
     parser.add_argument("--server-ssh-port", default=22, type=_port)
@@ -39,12 +42,6 @@ def main() -> int:
         help="server address reachable from the client (defaults to --server-host)",
     )
     parser.add_argument("--user", default="perf")
-    parser.add_argument(
-        "--server-implementation", choices=("quic-go", "msquic"), required=True
-    )
-    parser.add_argument(
-        "--client-implementation", choices=("quic-go", "msquic"), required=True
-    )
     parser.add_argument("--upload-bytes", default=1_000_000_000, type=_positive_int)
     parser.add_argument("--download-bytes", default=1_000_000_000, type=_positive_int)
     args = parser.parse_args()
@@ -54,79 +51,93 @@ def main() -> int:
         parser.error(f"SSH identity file does not exist: {identity_file}")
 
     implementations = {
-        "quic-go": QuicGoImplementation,
-        "msquic": MsQuicImplementation,
+        "quic-go": QuicGoImplementation(),
+        "msquic": MsQuicImplementation(),
     }
-    server_implementation = implementations[args.server_implementation]()
-    client_implementation = implementations[args.client_implementation]()
+    document = {"build_info": {}, "results": []}
+    server = SSHNode(
+        args.server_host,
+        args.server_ssh_port,
+        args.user,
+        identity_file,
+        known_hosts_file,
+    )
+    client = SSHNode(
+        args.client_host,
+        args.client_ssh_port,
+        args.user,
+        identity_file,
+        known_hosts_file,
+    )
+    try:
+        server.wait_for_ssh()
+        client.wait_for_ssh()
+        for role, node in (("server", server), ("client", client)):
+            metadata = node.run(
+                ("cat", "/home/perf/build-info.json"),
+                capture_output=True,
+                timeout=10,
+            )
+            document["build_info"][role] = json.loads(metadata.stdout)
 
+        for server_name, server_implementation in implementations.items():
+            for client_name, client_implementation in implementations.items():
+                document["results"].append(
+                    run_pair(
+                        server,
+                        client,
+                        server_name,
+                        client_name,
+                        server_implementation,
+                        client_implementation,
+                        args.server_address or args.server_host,
+                        args.upload_bytes,
+                        args.download_bytes,
+                    )
+                )
+    finally:
+        print(json.dumps(document, sort_keys=True))
+    return int(any(result["status"] != "success" for result in document["results"]))
+
+
+def run_pair(
+    server: SSHNode,
+    client: SSHNode,
+    server_name: str,
+    client_name: str,
+    server_implementation: QuicImplementation,
+    client_implementation: QuicImplementation,
+    server_address: str,
+    upload_bytes: int,
+    download_bytes: int,
+) -> dict:
     record = {
         "test": "throughput",
-        "client_implementation": args.client_implementation,
-        "server_implementation": args.server_implementation,
+        "client_implementation": client_name,
+        "server_implementation": server_name,
         "started_at": datetime.now(timezone.utc).isoformat(),
         "status": "failed",
         "parameters": {
-            "upload_bytes": args.upload_bytes,
-            "download_bytes": args.download_bytes,
+            "upload_bytes": upload_bytes,
+            "download_bytes": download_bytes,
         },
-        "build_info": {},
     }
-    with tempfile.TemporaryDirectory(prefix="quic-perf-") as temporary_directory:
-        known_hosts_file = Path(temporary_directory) / "known_hosts"
-        server = SSHNode(
-            args.server_host,
-            args.server_ssh_port,
-            args.user,
-            identity_file,
-            known_hosts_file,
-        )
-        client = SSHNode(
-            args.client_host,
-            args.client_ssh_port,
-            args.user,
-            identity_file,
-            known_hosts_file,
-        )
+    try:
         try:
-            server.wait_for_ssh()
-            client.wait_for_ssh()
-            for role, node in (("server", server), ("client", client)):
-                metadata = node.run(
-                    ("cat", "/home/perf/build-info.json"),
-                    capture_output=True,
-                    timeout=10,
-                )
-                record["build_info"][role] = json.loads(metadata.stdout)
-            try:
-                server_implementation.start_server(server)
-                time.sleep(3)
-                result = client_implementation.run_throughput_test(
-                    client,
-                    args.server_address or args.server_host,
-                    args.upload_bytes,
-                    args.download_bytes,
-                )
-            finally:
-                server_implementation.stop_server(server)
-            record["measurements"] = asdict(result)
-            record["status"] = "success"
+            server_implementation.start_server(server)
+            time.sleep(3)
+            result = client_implementation.run_throughput_test(
+                client, server_address, upload_bytes, download_bytes
+            )
         finally:
-            print(json.dumps(record, sort_keys=True))
-    return 0
+            server_implementation.stop_server(server)
+        record["measurements"] = asdict(result)
+        record["status"] = "success"
+    except Exception:
+        logger.exception("%s client → %s server failed", client_name, server_name)
+    return record
 
 
 if __name__ == "__main__":
-    try:
-        raise SystemExit(main())
-    except (
-        subprocess.CalledProcessError,
-        subprocess.TimeoutExpired,
-        TimeoutError,
-        ValueError,
-    ) as error:
-        print(error, file=sys.stderr)
-        if isinstance(error, subprocess.CalledProcessError):
-            print(error.stdout or "", file=sys.stderr, end="")
-            print(error.stderr or "", file=sys.stderr, end="")
-        raise SystemExit(1)
+    with tempfile.TemporaryDirectory(prefix="quic-perf-") as temporary_directory:
+        raise SystemExit(main(Path(temporary_directory) / "known_hosts"))
