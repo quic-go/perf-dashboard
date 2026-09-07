@@ -292,6 +292,26 @@ jobs:
           path: ${{ runner.temp }}/benchmark-report.json
           if-no-files-found: error
 
+      - name: Check out measurements repository
+        uses: actions/checkout@v7
+        with:
+          repository: quic-go/perf-measurements
+          ssh-key: ${{ secrets.MEASUREMENTS_DEPLOY_KEY }}
+          path: measurements
+
+      - name: Publish benchmark report
+        working-directory: measurements
+        run: |
+          recorded_at="$(jq -r '.recorded_at' "${RUNNER_TEMP}/benchmark-report.json")"
+          report_path="$(date --utc --date="${recorded_at}" +%Y/%m/%F)_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}.json"
+          mkdir -p "$(dirname "${report_path}")"
+          cp "${RUNNER_TEMP}/benchmark-report.json" "${report_path}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "${report_path}"
+          git commit -m "record measurements for run ${GITHUB_RUN_ID} (attempt ${GITHUB_RUN_ATTEMPT})"
+          git push
+
       - name: Write benchmark summary
         run: |
           python3 .github/scripts/benchmark_summary.py \
