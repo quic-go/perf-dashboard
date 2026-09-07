@@ -83,7 +83,8 @@ resource "azurerm_shared_image_version" "runner" {
   tags = local.benchmark_tags
 
   timeouts {
-    create = "2h"
+    # leave time for VM creation and state upload before the GitHub Actions job's limit
+    create = "20m"
     delete = "2h"
   }
 }
@@ -176,6 +177,10 @@ resource "azurerm_linux_virtual_machine" "node" {
   }
 
   tags = local.benchmark_tags
+
+  timeouts {
+    create = "10m"
+  }
 
   depends_on = [azurerm_network_interface_security_group_association.node]
 }
