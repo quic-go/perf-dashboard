@@ -127,10 +127,6 @@ permissions:
   contents: read
   id-token: write
 
-concurrency:
-  group: cloud-benchmark
-  cancel-in-progress: false
-
 env:
   TF_IN_AUTOMATION: true
   TF_VAR_gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
