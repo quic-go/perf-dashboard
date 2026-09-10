@@ -6,6 +6,11 @@ variable "location" {
   type = string
 }
 
+variable "machine_type" {
+  type    = string
+  default = "Standard_D2s_v5"
+}
+
 variable "azure_subscription_id" {
   type = string
 }

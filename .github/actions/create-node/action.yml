@@ -11,6 +11,8 @@ inputs:
   location:
     required: true
     description: Provider location, for example AWS region, GCP zone, or Azure region.
+  machine_type:
+    description: VM type; leave blank to use the Terraform default for the cloud provider.
   name:
     required: true
     description: Unique Terraform node name.
@@ -23,10 +25,15 @@ runs:
       env:
         TF_VAR_name: ${{ inputs.name }}
         TF_VAR_location: ${{ inputs.location }}
+        MACHINE_TYPE: ${{ inputs.machine_type }}
         ROLE: ${{ inputs.role }}
         CLOUD_PROVIDER: ${{ inputs.cloud_provider }}
       run: |
         set -euo pipefail
+
+        if [[ -n "${MACHINE_TYPE}" ]]; then
+          export TF_VAR_machine_type="${MACHINE_TYPE}"
+        fi
 
         node_dir="${RUNNER_TEMP}/${ROLE}-node"
         mkdir -p "${node_dir}"
