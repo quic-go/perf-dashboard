@@ -19,7 +19,7 @@ env:
 jobs:
   cleanup-aws:
     runs-on: ubuntu-latest
-    environment: ${{ github.event_name == 'workflow_dispatch' && 'cloud-test' || null }}
+    environment: ${{ github.ref != 'refs/heads/master' && 'cloud-test' || null }}
     concurrency:
       group: cloud-aws
       cancel-in-progress: false
@@ -120,7 +120,7 @@ jobs:
 
   cleanup-gcp:
     runs-on: ubuntu-latest
-    environment: ${{ github.event_name == 'workflow_dispatch' && 'cloud-test' || null }}
+    environment: ${{ github.ref != 'refs/heads/master' && 'cloud-test' || null }}
     concurrency:
       group: cloud-gcp
       cancel-in-progress: false
@@ -182,7 +182,7 @@ jobs:
 
   cleanup-azure:
     runs-on: ubuntu-latest
-    environment: ${{ github.event_name == 'workflow_dispatch' && 'cloud-test' || null }}
+    environment: ${{ github.ref != 'refs/heads/master' && 'cloud-test' || null }}
     concurrency:
       group: cloud-azure
       cancel-in-progress: false

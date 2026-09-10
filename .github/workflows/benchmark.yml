@@ -138,7 +138,7 @@ jobs:
   create-node:
     name: Create ${{ matrix.role }} node
     runs-on: ubuntu-latest
-    environment: cloud-test
+    environment: ${{ github.ref != 'refs/heads/master' && 'cloud-test' || null }}
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -334,7 +334,7 @@ jobs:
     needs: [create-node, benchmark]
     if: always()
     runs-on: ubuntu-latest
-    environment: cloud-test
+    environment: ${{ github.ref != 'refs/heads/master' && 'cloud-test' || null }}
     strategy:
       fail-fast: false
       matrix:
