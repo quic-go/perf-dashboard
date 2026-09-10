@@ -50,7 +50,7 @@ jobs:
     needs: validate
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    environment: ${{ github.event_name == 'workflow_dispatch' && 'cloud-test' || null }}
+    environment: ${{ github.ref != 'refs/heads/master' && 'cloud-test' || null }}
     outputs:
       image_id: ${{ steps.manifest.outputs.image_id }}
       image_size: ${{ steps.image_size.outputs.image_size }}
@@ -102,7 +102,7 @@ jobs:
     needs: validate
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    environment: ${{ github.event_name == 'workflow_dispatch' && 'cloud-test' || null }}
+    environment: ${{ github.ref != 'refs/heads/master' && 'cloud-test' || null }}
     outputs:
       image_id: ${{ steps.manifest.outputs.image_id }}
       image_size: ${{ steps.image_size.outputs.image_size }}
@@ -161,7 +161,7 @@ jobs:
     needs: validate
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    environment: ${{ github.event_name == 'workflow_dispatch' && 'cloud-test' || null }}
+    environment: ${{ github.ref != 'refs/heads/master' && 'cloud-test' || null }}
     outputs:
       image_id: ${{ steps.manifest.outputs.image_id }}
     concurrency:
