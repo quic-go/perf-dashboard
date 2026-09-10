@@ -269,6 +269,7 @@ jobs:
     needs: [create-node, benchmark]
     if: always() && needs.create-node.result == 'success'
     runs-on: ubuntu-latest
+    environment: measurements
     # serialize reports so concurrent runs don't race when pushing measurements
     concurrency:
       group: publish-benchmark-results
