@@ -212,7 +212,7 @@ jobs:
           if-no-files-found: ignore
 
   benchmark:
-    name: ${{ matrix.client_implementation }} client → ${{ matrix.server_implementation }} server
+    name: ${{ matrix.client_implementation }} client ← ${{ matrix.server_implementation }} server
     needs: create-node
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -269,6 +269,12 @@ jobs:
     needs: [create-node, benchmark]
     if: always() && needs.create-node.result == 'success'
     runs-on: ubuntu-latest
+    environment: ${{ github.ref == 'refs/heads/master' && 'measurements' || 'cloud-test' }}
+    # serialize reports so concurrent runs don't race when pushing measurements
+    concurrency:
+      group: publish-benchmark-results
+      cancel-in-progress: false
+      queue: max
     steps:
       - uses: actions/checkout@v7
 
@@ -291,6 +297,31 @@ jobs:
           name: benchmark-report
           path: ${{ runner.temp }}/benchmark-report.json
           if-no-files-found: error
+
+      - name: Check out measurements repository
+        uses: actions/checkout@v7
+        with:
+          repository: quic-go/perf-measurements
+          ssh-key: ${{ secrets.MEASUREMENTS_DEPLOY_KEY }}
+          path: measurements
+
+      - name: Publish benchmark report
+        working-directory: measurements
+        env:
+          CLIENT_LOCATION: ${{ inputs.client_location }}
+          SERVER_LOCATION: ${{ inputs.server_location }}
+        run: |
+          recorded_at="$(jq -r '.recorded_at' "${RUNNER_TEMP}/benchmark-report.json")"
+          report_path="$(date --utc --date="${recorded_at}" +%Y/%m/%F)_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}.json"
+          mkdir -p "$(dirname "${report_path}")"
+          cp "${RUNNER_TEMP}/benchmark-report.json" "${report_path}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "${report_path}"
+          git commit \
+            -m "$(date --utc --date="${recorded_at}" '+%F %TZ'): ${CLIENT_LOCATION} → ${SERVER_LOCATION}" \
+            -m "$(jq -r '.run.url' "${RUNNER_TEMP}/benchmark-report.json")"
+          git push
 
       - name: Write benchmark summary
         run: |
