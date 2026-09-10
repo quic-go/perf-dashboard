@@ -212,7 +212,7 @@ jobs:
           if-no-files-found: ignore
 
   benchmark:
-    name: ${{ matrix.client_implementation }} client → ${{ matrix.server_implementation }} server
+    name: ${{ matrix.client_implementation }} client ← ${{ matrix.server_implementation }} server
     needs: create-node
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -269,7 +269,7 @@ jobs:
     needs: [create-node, benchmark]
     if: always() && needs.create-node.result == 'success'
     runs-on: ubuntu-latest
-    environment: measurements
+    environment: ${{ github.ref == 'refs/heads/master' && 'measurements' || 'cloud-test' }}
     # serialize reports so concurrent runs don't race when pushing measurements
     concurrency:
       group: publish-benchmark-results
