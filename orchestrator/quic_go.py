@@ -26,8 +26,8 @@ def _parse_result(output: str) -> ThroughputResult:
 class QuicGoImplementation(QuicImplementation):
     server_command = (
         "/opt/quic-go/perf/quic-go-perf",
-        "--run-server",
-        "--server-address=0.0.0.0:4433",
+        "server",
+        "--address=0.0.0.0:4433",
     )
 
     def run_throughput_test(
@@ -40,7 +40,8 @@ class QuicGoImplementation(QuicImplementation):
         completed = client.run(
             (
                 "/opt/quic-go/perf/quic-go-perf",
-                f"--server-address={server_address}:4433",
+                "throughput",
+                f"--address={server_address}:4433",
                 f"--upload-bytes={upload_bytes}",
                 f"--download-bytes={download_bytes}",
             ),
