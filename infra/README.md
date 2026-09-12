@@ -10,6 +10,7 @@ Common variables:
 
 - `name`: unique name for the node and temporary resources.
 - `location`: AWS region, GCP zone, or Azure region.
+- `machine_type`: VM type. The benchmark workflow exposes optional `server_machine_type` and `client_machine_type` inputs to configure each node independently.
 
 Provider variables:
 

@@ -159,7 +159,7 @@ resource "azurerm_linux_virtual_machine" "node" {
   name                            = var.name
   resource_group_name             = var.azure_resource_group
   location                        = var.location
-  size                            = "Standard_D2s_v5"
+  size                            = var.machine_type
   admin_username                  = "perf"
   disable_password_authentication = true
   network_interface_ids           = [azurerm_network_interface.node.id]

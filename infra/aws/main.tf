@@ -78,7 +78,7 @@ resource "aws_security_group" "node" {
 
 resource "aws_instance" "node" {
   ami                         = var.location == var.aws_source_region ? data.aws_ami.runner.id : aws_ami_copy.runner[0].id
-  instance_type               = "c6i.large"
+  instance_type               = var.machine_type
   subnet_id                   = sort(data.aws_subnets.default.ids)[0]
   associate_public_ip_address = true
   vpc_security_group_ids      = [aws_security_group.node.id]

@@ -122,6 +122,12 @@ on:
         required: true
         type: choice
         options: *locations
+      server_machine_type:
+        description: Server VM type (blank for the cloud's default)
+        type: string
+      client_machine_type:
+        description: Client VM type (blank for the cloud's default)
+        type: string
 
 permissions:
   contents: read
@@ -146,8 +152,10 @@ jobs:
         include:
           - role: server
             target: ${{ inputs.server_location }}
+            machine_type: ${{ inputs.server_machine_type }}
           - role: client
             target: ${{ inputs.client_location }}
+            machine_type: ${{ inputs.client_machine_type }}
     steps:
       - &resolve_location
         name: Resolve cloud location
@@ -199,6 +207,7 @@ jobs:
           role: ${{ matrix.role }}
           cloud_provider: ${{ steps.target.outputs.provider }}
           location: ${{ steps.target.outputs.location }}
+          machine_type: ${{ matrix.machine_type }}
           name: quic-perf-${{ steps.target.outputs.provider }}-${{ matrix.role }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - uses: actions/upload-artifact@v7

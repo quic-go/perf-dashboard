@@ -5,7 +5,7 @@ data "google_compute_image" "runner" {
 
 resource "google_compute_instance" "node" {
   name         = var.name
-  machine_type = "e2-medium"
+  machine_type = var.machine_type
   zone         = var.location
   tags         = ["quic-perf-runner"]
 
