@@ -148,4 +148,4 @@ jobs:
       client_location: ${{ inputs.client_location }}
       server_machine_type: ${{ inputs.server_machine_type }}
       client_machine_type: ${{ inputs.client_machine_type }}
-      download_bytes: ${{ inputs.download_bytes }}
+      download_bytes: ${{ fromJSON(inputs.download_bytes) }}
