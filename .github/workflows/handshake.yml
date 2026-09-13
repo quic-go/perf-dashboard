@@ -147,5 +147,5 @@ jobs:
       client_location: ${{ inputs.location }}
       server_machine_type: ${{ inputs.server_machine_type }}
       client_machine_type: ${{ inputs.client_machine_type }}
-      duration_seconds: ${{ inputs.duration_seconds }}
-      concurrency: ${{ inputs.concurrency }}
+      duration_seconds: ${{ fromJSON(inputs.duration_seconds) }}
+      concurrency: ${{ fromJSON(inputs.concurrency) }}
