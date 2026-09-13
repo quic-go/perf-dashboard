@@ -58,22 +58,42 @@ jobs:
           docker run -d --name client --network quic-perf -p 127.0.0.1:2223:22 \
             quic-perf-runner:local
 
-      - name: Run quic-go benchmark
+      - name: Run quic-go throughput benchmark
         run: |
-          python3 orchestrator/run_benchmark.py \
+          python3 orchestrator/run_benchmark.py throughput \
             --identity-file "${RUNNER_TEMP}/quic-perf" \
             --server-host 127.0.0.1 --server-ssh-port 2222 \
             --client-host 127.0.0.1 --client-ssh-port 2223 \
             --server-address server \
             --server-implementation quic-go --client-implementation quic-go \
-            --upload-bytes 1000000 --download-bytes 1000000
+            --download-bytes 1000000
 
-      - name: Run MsQuic benchmark
+      - name: Run MsQuic throughput benchmark
         run: |
-          python3 orchestrator/run_benchmark.py \
+          python3 orchestrator/run_benchmark.py throughput \
             --identity-file "${RUNNER_TEMP}/quic-perf" \
             --server-host 127.0.0.1 --server-ssh-port 2222 \
             --client-host 127.0.0.1 --client-ssh-port 2223 \
             --server-address server \
             --server-implementation msquic --client-implementation msquic \
-            --upload-bytes 1000000 --download-bytes 1000000
+            --download-bytes 1000000
+
+      - name: Run quic-go handshake benchmark
+        run: |
+          python3 orchestrator/run_benchmark.py handshake \
+            --identity-file "${RUNNER_TEMP}/quic-perf" \
+            --server-host 127.0.0.1 --server-ssh-port 2222 \
+            --client-host 127.0.0.1 --client-ssh-port 2223 \
+            --server-address server \
+            --server-implementation quic-go --client-implementation quic-go \
+            --duration-seconds 2 --concurrency 4
+
+      - name: Run MsQuic handshake benchmark
+        run: |
+          python3 orchestrator/run_benchmark.py handshake \
+            --identity-file "${RUNNER_TEMP}/quic-perf" \
+            --server-host 127.0.0.1 --server-ssh-port 2222 \
+            --client-host 127.0.0.1 --client-ssh-port 2223 \
+            --server-address server \
+            --server-implementation msquic --client-implementation msquic \
+            --duration-seconds 2 --concurrency 4

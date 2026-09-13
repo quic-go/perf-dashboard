@@ -6,14 +6,32 @@ from unittest.mock import patch
 
 from msquic import _parse_result as parse_msquic_result
 from quic_go import _parse_result as parse_quic_go_result
-from quic_implementation import SSHNode, ThroughputResult
+from quic_implementation import HandshakeResult, SSHNode, ThroughputResult
 from run_benchmark import main
 
 
 class RunBenchmarkTest(unittest.TestCase):
+    def test_downloads(self) -> None:
+        quic_go_output = (
+            "progress log\n"
+            '{"type":"final","downloadBytes":2000000,"timeSeconds":0.025,"downloadSeconds":0.02}\n'
+        )
+        self.assertEqual(
+            parse_quic_go_result(quic_go_output, "throughput"),
+            ThroughputResult(2_000_000, 0.025, 640_000_000),
+        )
+        self.assertEqual(
+            parse_msquic_result(
+                "Started!\nResult: Download 2000000 bytes @ 640000 kbps (25.000 ms).\n",
+                "throughput",
+            ),
+            ThroughputResult(2_000_000, 0.025, 640_000_000),
+        )
+
     def test_failure_record(self) -> None:
         args = [
             "run_benchmark.py",
+            "throughput",
             f"--identity-file={__file__}",
             "--server-host=server",
             "--client-host=client",
@@ -31,24 +49,20 @@ class RunBenchmarkTest(unittest.TestCase):
         record = json.loads(output.getvalue())
         self.assertEqual(record["status"], "failed")
         self.assertNotIn("measurements", record)
+        self.assertEqual(record["parameters"], {"download_bytes": 1_000_000_000})
 
-    def test_implementations(self) -> None:
-        quic_go_output = """
-2026/08/24 14:00:00 uploaded 976.56 KiB: 0.02s (320.00 mbps)
-{"type":"final","uploadBytes":1000000,"uploadSeconds":0.025,"downloadBytes":1000000,"downloadSeconds":0.0125}
-        """
-        self.assertEqual(
-            parse_quic_go_result(quic_go_output),
-            ThroughputResult(1_000_000, 1_000_000, 320_000_000, 640_000_000),
+    def test_handshakes(self) -> None:
+        quic_go_output = (
+            'log\n{"type":"intermediary"}\n'
+            '{"type":"final","timeSeconds":2,"handshakes":200,"failedHandshakes":1,"incompleteHandshakes":3,"handshakesPerSecond":100}\n'
         )
-
-        msquic_output = """
-Result: Upload 136274 kbps.
-Result: Download 136274 kbps.
-        """
         self.assertEqual(
-            parse_msquic_result(msquic_output, 1_000_000, 1_000_000),
-            ThroughputResult(1_000_000, 1_000_000, 136_274_000, 136_274_000),
+            parse_quic_go_result(quic_go_output, "handshake"),
+            HandshakeResult(100, 200, 1, 3),
+        )
+        self.assertEqual(
+            parse_msquic_result("Started!\nResult: 100 HPS\n", "handshake"),
+            HandshakeResult(100),
         )
 
 
