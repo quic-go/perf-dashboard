@@ -1,0 +1,151 @@
+name: Run handshake benchmark
+run-name: Handshake — ${{ inputs.location }}, ${{ inputs.concurrency }} concurrent handshakes
+
+on:
+  workflow_dispatch:
+    inputs:
+      location:
+        description: Cloud provider and location for both nodes
+        required: true
+        type: choice
+        # Standard-access locations supported by the configured VM types; GCP requires a zone.
+        options:
+          - aws / us-west-2
+          - aws / ap-northeast-1
+          - aws / ap-northeast-2
+          - aws / ap-northeast-3
+          - aws / ap-south-1
+          - aws / ap-southeast-1
+          - aws / ap-southeast-2
+          - aws / ca-central-1
+          - aws / eu-central-1
+          - aws / eu-north-1
+          - aws / eu-west-1
+          - aws / eu-west-2
+          - aws / eu-west-3
+          - aws / sa-east-1
+          - aws / us-east-1
+          - aws / us-east-2
+          - aws / us-west-1
+          - gcp / africa-south1-a
+          - gcp / asia-east1-a
+          - gcp / asia-east2-a
+          - gcp / asia-northeast1-a
+          - gcp / asia-northeast2-a
+          - gcp / asia-northeast3-a
+          - gcp / asia-south1-a
+          - gcp / asia-south2-a
+          - gcp / asia-southeast1-a
+          - gcp / asia-southeast2-a
+          - gcp / australia-southeast1-a
+          - gcp / australia-southeast2-a
+          - gcp / europe-central2-a
+          - gcp / europe-north1-a
+          - gcp / europe-north2-a
+          - gcp / europe-southwest1-a
+          - gcp / europe-west1-b
+          - gcp / europe-west2-a
+          - gcp / europe-west3-a
+          - gcp / europe-west4-a
+          - gcp / europe-west6-a
+          - gcp / europe-west8-a
+          - gcp / europe-west9-a
+          - gcp / europe-west10-a
+          - gcp / europe-west12-a
+          - gcp / me-central1-a
+          - gcp / me-central2-a
+          - gcp / me-west1-a
+          - gcp / northamerica-northeast1-a
+          - gcp / northamerica-northeast2-a
+          - gcp / northamerica-south1-a
+          - gcp / southamerica-east1-a
+          - gcp / southamerica-west1-a
+          - gcp / us-central1-a
+          - gcp / us-east1-b
+          - gcp / us-east4-a
+          - gcp / us-east5-a
+          - gcp / us-south1-a
+          - gcp / us-west1-a
+          - gcp / us-west2-a
+          - gcp / us-west3-a
+          - gcp / us-west4-a
+          - azure / australiacentral
+          - azure / australiaeast
+          - azure / australiasoutheast
+          - azure / austriaeast
+          - azure / belgiumcentral
+          - azure / brazilsouth
+          - azure / canadacentral
+          - azure / canadaeast
+          - azure / centralindia
+          - azure / centralus
+          - azure / chilecentral
+          - azure / denmarkeast
+          - azure / eastasia
+          - azure / eastus
+          - azure / eastus2
+          - azure / francecentral
+          - azure / germanywestcentral
+          - azure / indiasouthcentral
+          - azure / indonesiacentral
+          - azure / israelcentral
+          - azure / italynorth
+          - azure / japaneast
+          - azure / japanwest
+          - azure / koreacentral
+          - azure / koreasouth
+          - azure / malaysiawest
+          - azure / mexicocentral
+          - azure / newzealandnorth
+          - azure / northcentralus
+          - azure / northeurope
+          - azure / norwayeast
+          - azure / polandcentral
+          - azure / qatarcentral
+          - azure / southafricanorth
+          - azure / southcentralus
+          - azure / southindia
+          - azure / southeastasia
+          - azure / spaincentral
+          - azure / swedencentral
+          - azure / switzerlandnorth
+          - azure / uaenorth
+          - azure / uksouth
+          - azure / ukwest
+          - azure / westcentralus
+          - azure / westeurope
+          - azure / westindia
+          - azure / westus
+          - azure / westus2
+          - azure / westus3
+      server_machine_type:
+        description: Server VM type (blank for the cloud's default)
+        type: string
+      client_machine_type:
+        description: Client VM type (blank for the cloud's default)
+        type: string
+      duration_seconds:
+        description: Measurement duration per pairing in seconds
+        type: number
+        default: 12
+      concurrency:
+        description: Concurrent handshakes
+        type: number
+        required: true
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  benchmark:
+    uses: ./.github/workflows/benchmark.yml
+    secrets: inherit
+    with:
+      scenario: handshake
+      server_location: ${{ inputs.location }}
+      client_location: ${{ inputs.location }}
+      server_machine_type: ${{ inputs.server_machine_type }}
+      client_machine_type: ${{ inputs.client_machine_type }}
+      duration_seconds: ${{ inputs.duration_seconds }}
+      concurrency: ${{ inputs.concurrency }}

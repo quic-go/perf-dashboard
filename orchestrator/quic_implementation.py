@@ -8,10 +8,17 @@ from pathlib import Path
 
 @dataclass(frozen=True)
 class ThroughputResult:
-    upload_bytes: int
-    download_bytes: int
-    upload_bits_per_second: int
-    download_bits_per_second: int
+    bytes: int
+    duration_seconds: float
+    bits_per_second: int
+
+
+@dataclass(frozen=True)
+class HandshakeResult:
+    handshakes_per_second: float
+    handshakes: int | None = None
+    failed_handshakes: int | None = None
+    incomplete_handshakes: int | None = None
 
 
 @dataclass(frozen=True)
@@ -66,9 +73,18 @@ class QuicImplementation(ABC):
         self,
         client: SSHNode,
         server_address: str,
-        upload_bytes: int,
         download_bytes: int,
     ) -> ThroughputResult:
+        pass
+
+    @abstractmethod
+    def run_handshake_test(
+        self,
+        client: SSHNode,
+        server_address: str,
+        concurrency: int,
+        duration_seconds: int,
+    ) -> HandshakeResult:
         pass
 
     def start_server(self, server: SSHNode) -> None:

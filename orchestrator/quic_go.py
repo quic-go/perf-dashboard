@@ -1,22 +1,37 @@
 import json
+import math
 
-from quic_implementation import QuicImplementation, SSHNode, ThroughputResult
+from quic_implementation import (
+    HandshakeResult,
+    QuicImplementation,
+    SSHNode,
+    ThroughputResult,
+)
 
 
-def _parse_result(output: str) -> ThroughputResult:
+def _parse_result(output: str, test: str) -> ThroughputResult | HandshakeResult:
     for line in output.splitlines():
         try:
             result = json.loads(line)
             if isinstance(result, dict) and result.get("type") == "final":
+                if test == "handshake":
+                    rate = result["handshakesPerSecond"]
+                    if not math.isfinite(rate) or rate <= 0:
+                        continue
+                    return HandshakeResult(
+                        handshakes_per_second=rate,
+                        handshakes=result["handshakes"],
+                        failed_handshakes=result["failedHandshakes"],
+                        incomplete_handshakes=result["incompleteHandshakes"],
+                    )
+                num_bytes = result["downloadBytes"]
+                duration = result["timeSeconds"]
+                if num_bytes <= 0 or not math.isfinite(duration) or duration <= 0:
+                    continue
                 return ThroughputResult(
-                    upload_bytes=result["uploadBytes"],
-                    download_bytes=result["downloadBytes"],
-                    upload_bits_per_second=round(
-                        result["uploadBytes"] * 8 / result["uploadSeconds"]
-                    ),
-                    download_bits_per_second=round(
-                        result["downloadBytes"] * 8 / result["downloadSeconds"]
-                    ),
+                    bytes=num_bytes,
+                    duration_seconds=duration,
+                    bits_per_second=round(num_bytes * 8 / duration),
                 )
         except (json.JSONDecodeError, KeyError, TypeError, ZeroDivisionError):
             continue
@@ -34,7 +49,6 @@ class QuicGoImplementation(QuicImplementation):
         self,
         client: SSHNode,
         server_address: str,
-        upload_bytes: int,
         download_bytes: int,
     ) -> ThroughputResult:
         completed = client.run(
@@ -42,10 +56,29 @@ class QuicGoImplementation(QuicImplementation):
                 "/opt/quic-go/perf/quic-go-perf",
                 "throughput",
                 f"--address={server_address}:4433",
-                f"--upload-bytes={upload_bytes}",
                 f"--download-bytes={download_bytes}",
             ),
             capture_output=True,
             timeout=15 * 60,
         )
-        return _parse_result(completed.stdout + completed.stderr)
+        return _parse_result(completed.stdout + completed.stderr, "throughput")
+
+    def run_handshake_test(
+        self,
+        client: SSHNode,
+        server_address: str,
+        concurrency: int,
+        duration_seconds: int,
+    ) -> HandshakeResult:
+        completed = client.run(
+            (
+                "/opt/quic-go/perf/quic-go-perf",
+                "handshake",
+                f"--address={server_address}:4433",
+                f"--concurrency={concurrency}",
+                f"--duration={duration_seconds}s",
+            ),
+            capture_output=True,
+            timeout=duration_seconds + 30,
+        )
+        return _parse_result(completed.stdout + completed.stderr, "handshake")

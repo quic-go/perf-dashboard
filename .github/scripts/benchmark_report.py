@@ -10,10 +10,12 @@ parser.add_argument("artifacts", type=Path)
 parser.add_argument("--run-id", type=int, required=True)
 parser.add_argument("--attempt", type=int, required=True)
 parser.add_argument("--url", required=True)
+parser.add_argument("--test", choices=("throughput", "handshake"), required=True)
 args = parser.parse_args()
 
 document = {
     "schema_version": 1,
+    "test": args.test,
     "recorded_at": datetime.now(timezone.utc).isoformat(),
     "run": {"id": args.run_id, "attempt": args.attempt, "url": args.url},
     "nodes": {},
