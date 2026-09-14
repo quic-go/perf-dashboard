@@ -13,7 +13,7 @@ else
     start=$(cat "$TIMER_FILE")
     elapsed=$((now - start))
     echo "Elapsed time since user logout: $elapsed seconds"
-    if [ "$elapsed" -ge 600 ]; then
+    if [ "$elapsed" -ge 3600 ]; then
       /usr/sbin/shutdown -P now
     fi
   else
