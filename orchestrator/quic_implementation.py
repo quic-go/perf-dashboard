@@ -1,9 +1,11 @@
+import os
 import shlex
 import subprocess
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
+from typing import BinaryIO
 
 
 @dataclass(frozen=True)
@@ -35,10 +37,13 @@ class SSHNode:
         *,
         check: bool = True,
         capture_output: bool = False,
+        stdout: BinaryIO | None = None,
         timeout: float | None = None,
     ) -> subprocess.CompletedProcess[str]:
         if not isinstance(command, str):
             command = shlex.join(command)
+        if qlog_dir := os.environ.get("QLOGDIR"):
+            command = f"export QLOGDIR={shlex.quote(qlog_dir)}; {command}"
         args = ["ssh", "-i", str(self.identity_file), "-p", str(self.port)]
         args += ["-oBatchMode=yes", "-oConnectTimeout=5"]
         args += ["-oStrictHostKeyChecking=accept-new"]
@@ -48,6 +53,7 @@ class SSHNode:
             args,
             check=check,
             capture_output=capture_output,
+            stdout=stdout,
             text=True,
             timeout=timeout,
         )
@@ -67,6 +73,9 @@ class SSHNode:
 
 class QuicImplementation(ABC):
     server_command: tuple[str, ...]
+
+    def collect_qlog(self, node: SSHNode, destination: Path) -> None:
+        pass
 
     @abstractmethod
     def run_throughput_test(
@@ -89,17 +98,22 @@ class QuicImplementation(ABC):
 
     def start_server(self, server: SSHNode) -> None:
         command = shlex.join(self.server_command)
+        # The shell reaps the server so stop_server can wait for its exit.
+        script = f"{command} & echo $! >/tmp/benchmark-server.pid; wait"
         server.run(
-            f"nohup {command} >/tmp/benchmark-server.log 2>&1 & "
-            "echo $! >/tmp/benchmark-server.pid",
+            f"nohup sh -c {shlex.quote(script)} "
+            ">/tmp/benchmark-server.log 2>&1 </dev/null &",
             timeout=10,
         )
 
     def stop_server(self, server: SSHNode) -> None:
         server.run(
             "if [ -f /tmp/benchmark-server.pid ]; then "
-            'kill "$(cat /tmp/benchmark-server.pid)" 2>/dev/null || true; '
-            "rm -f /tmp/benchmark-server.pid; fi",
+            "pid=$(cat /tmp/benchmark-server.pid); "
+            'kill "$pid" 2>/dev/null || true; '
+            'timeout 10 tail --pid="$pid" -f /dev/null; exit_code=$?; '
+            '[ "$exit_code" -eq 0 ] || kill -KILL "$pid" 2>/dev/null; '
+            'rm -f /tmp/benchmark-server.pid; exit "$exit_code"; fi',
             capture_output=True,
-            timeout=10,
+            timeout=15,
         )

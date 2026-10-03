@@ -59,6 +59,8 @@ jobs:
             quic-perf-runner:local
 
       - name: Run quic-go throughput benchmark
+        env:
+          QLOGDIR: qlogs
         run: |
           python3 orchestrator/run_benchmark.py throughput \
             --identity-file "${RUNNER_TEMP}/quic-perf" \

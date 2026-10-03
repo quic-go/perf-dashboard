@@ -132,6 +132,10 @@ on:
         description: Concurrent handshakes
         type: number
         required: true
+      qlog:
+        description: Capture quic-go qlogs (affects performance)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -149,3 +153,4 @@ jobs:
       client_machine_type: ${{ inputs.client_machine_type }}
       duration_seconds: ${{ fromJSON(inputs.duration_seconds) }}
       concurrency: ${{ fromJSON(inputs.concurrency) }}
+      qlog: ${{ inputs.qlog }}
