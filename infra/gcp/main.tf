@@ -3,6 +3,18 @@ data "google_compute_image" "runner" {
   project = var.gcp_project_id
 }
 
+resource "google_compute_firewall" "node" {
+  name    = var.name
+  network = "default"
+
+  allow {
+    protocol = "udp"
+    ports    = ["4433"]
+  }
+
+  source_ranges = ["0.0.0.0/0"]
+}
+
 resource "google_compute_instance" "node" {
   name         = var.name
   machine_type = var.machine_type
