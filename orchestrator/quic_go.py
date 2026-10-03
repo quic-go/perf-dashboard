@@ -1,5 +1,6 @@
 import json
 import math
+from pathlib import Path
 
 from quic_implementation import (
     HandshakeResult,
@@ -44,6 +45,15 @@ class QuicGoImplementation(QuicImplementation):
         "server",
         "--address=0.0.0.0:4433",
     )
+
+    def collect_qlog(self, node: SSHNode, destination: Path) -> None:
+        with destination.open("wb") as archive:
+            node.run(
+                'tar --zstd -cf - -C "$QLOGDIR" .',
+                stdout=archive,
+                timeout=15 * 60,
+            )
+        node.run('find "$QLOGDIR" -maxdepth 1 -name "*.sqlog" -delete', timeout=30)
 
     def run_throughput_test(
         self,

@@ -1,5 +1,6 @@
 import argparse
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -60,6 +61,7 @@ def main() -> int:
     if not identity_file.is_file():
         parser.error(f"SSH identity file does not exist: {identity_file}")
 
+    qlog_dir = os.environ.get("QLOGDIR")
     implementations = {
         "quic-go": QuicGoImplementation,
         "msquic": MsQuicImplementation,
@@ -85,6 +87,7 @@ def main() -> int:
         "started_at": datetime.now(timezone.utc).isoformat(),
         "status": "failed",
         "parameters": parameters,
+        "qlog": bool(qlog_dir),
         "build_info": {},
     }
     with tempfile.TemporaryDirectory(prefix="quic-perf-") as temporary_directory:
@@ -134,6 +137,11 @@ def main() -> int:
                         raise ValueError(f"unsupported benchmark: {args.test}")
             finally:
                 server_implementation.stop_server(server)
+                if qlog_dir:
+                    qlogs = Path(qlog_dir)
+                    qlogs.mkdir(parents=True, exist_ok=True)
+                    client_implementation.collect_qlog(client, qlogs / "client.tar.zst")
+                    server_implementation.collect_qlog(server, qlogs / "server.tar.zst")
             record["measurements"] = {
                 key: value for key, value in asdict(result).items() if value is not None
             }

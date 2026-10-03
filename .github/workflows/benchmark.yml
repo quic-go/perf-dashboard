@@ -24,6 +24,9 @@ on:
         default: 12
       concurrency:
         type: number
+      qlog:
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -157,6 +160,7 @@ jobs:
           DOWNLOAD_BYTES: ${{ inputs.download_bytes }}
           DURATION_SECONDS: ${{ inputs.duration_seconds }}
           CONCURRENCY: ${{ inputs.concurrency }}
+          QLOGDIR: ${{ inputs.qlog && 'qlogs' || '' }}
         run: |
           if [[ "${SCENARIO}" == throughput ]]; then
             parameters=(--download-bytes "${DOWNLOAD_BYTES}")
@@ -179,6 +183,16 @@ jobs:
           path: ${{ runner.temp }}/benchmark-result.json
           if-no-files-found: error
 
+      - name: Upload endpoint qlogs
+        if: always() && inputs.qlog
+        uses: actions/upload-artifact@v7
+        with:
+          name: qlogs-${{ inputs.scenario }}-${{ matrix.client_implementation }}-${{ matrix.server_implementation }}-${{ github.run_attempt }}
+          path: qlogs/*.tar.zst
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: ignore
+
   summary:
     name: Benchmark summary
     needs: [create-node, benchmark]
@@ -195,6 +209,7 @@ jobs:
 
       - uses: actions/download-artifact@v8
         with:
+          pattern: "{*-node,benchmark-result-*}"
           path: ${{ runner.temp }}/benchmark-artifacts
 
       - name: Write benchmark report

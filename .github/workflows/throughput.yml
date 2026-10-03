@@ -133,6 +133,10 @@ on:
         description: Bytes to download per pairing
         type: number
         default: 1000000000
+      qlog:
+        description: Capture quic-go qlogs (affects performance)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -149,3 +153,4 @@ jobs:
       server_machine_type: ${{ inputs.server_machine_type }}
       client_machine_type: ${{ inputs.client_machine_type }}
       download_bytes: ${{ fromJSON(inputs.download_bytes) }}
+      qlog: ${{ inputs.qlog }}

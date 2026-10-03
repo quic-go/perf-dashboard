@@ -174,7 +174,7 @@ build {
     environment_vars = ["DEBIAN_FRONTEND=noninteractive"]
     inline = [
       "echo '=== Updating package list and installing base packages ==='",
-      "sudo apt-get update && sudo apt-get install -y ca-certificates curl git jq",
+      "sudo apt-get update && sudo apt-get install -y ca-certificates curl git jq zstd",
     ]
   }
 
