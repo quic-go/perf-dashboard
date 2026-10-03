@@ -136,6 +136,10 @@ on:
         description: Capture quic-go qlogs (affects performance)
         type: boolean
         default: false
+      skip_publish:
+        description: Skip publishing results to quic-go/perf-measurements
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -154,3 +158,4 @@ jobs:
       duration_seconds: ${{ fromJSON(inputs.duration_seconds) }}
       concurrency: ${{ fromJSON(inputs.concurrency) }}
       qlog: ${{ inputs.qlog }}
+      skip_publish: ${{ inputs.skip_publish }}

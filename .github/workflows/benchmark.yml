@@ -27,6 +27,9 @@ on:
       qlog:
         type: boolean
         default: false
+      skip_publish:
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -230,6 +233,7 @@ jobs:
           if-no-files-found: error
 
       - name: Check out measurements repository
+        if: ${{ !inputs.skip_publish }}
         uses: actions/checkout@v7
         with:
           repository: quic-go/perf-measurements
@@ -237,6 +241,7 @@ jobs:
           path: measurements
 
       - name: Publish benchmark report
+        if: ${{ !inputs.skip_publish }}
         working-directory: measurements
         env:
           SCENARIO: ${{ inputs.scenario }}
