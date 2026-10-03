@@ -7,6 +7,8 @@ resource "google_compute_firewall" "node" {
   name    = var.name
   network = "default"
 
+  target_tags = ["quic-perf-runner"]
+
   allow {
     protocol = "udp"
     ports    = ["4433"]
