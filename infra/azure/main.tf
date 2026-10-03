@@ -116,9 +116,10 @@ resource "azurerm_public_ip" "node" {
 }
 
 resource "azurerm_network_interface" "node" {
-  name                = "${var.name}-nic"
-  location            = var.location
-  resource_group_name = var.azure_resource_group
+  name                           = "${var.name}-nic"
+  location                       = var.location
+  resource_group_name            = var.azure_resource_group
+  accelerated_networking_enabled = true
 
   ip_configuration {
     name                          = "primary"
