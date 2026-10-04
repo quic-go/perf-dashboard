@@ -207,9 +207,12 @@ jobs:
         run: |
           set -euo pipefail
           image_id="$(jq -er '.builds[-1].artifact_id | select(type == "string" and length > 0)' packer-manifest.json)"
-          az sig image-version update --ids "${image_id}" \
-            --set tags.PackerLifecycle=retained \
-            --exclude-from-latest false \
+          az sig image-version update \
+            --resource-group "${PKR_VAR_azure_resource_group}" \
+            --gallery-name quicperfrunner \
+            --gallery-image-definition quic-perf-runner \
+            --gallery-image-version "${image_id##*/}" \
+            --set tags.PackerLifecycle=retained publishingProfile.excludeFromLatest=false \
             --output none
           echo "image_id=${image_id}" >> "${GITHUB_OUTPUT}"
 
