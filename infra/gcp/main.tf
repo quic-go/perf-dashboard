@@ -1,5 +1,5 @@
 data "google_compute_image" "runner" {
-  family  = "quic-perf-runner"
+  family  = "quic-perf-runner-amd64"
   project = var.gcp_project_id
 }
 

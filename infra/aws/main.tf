@@ -5,7 +5,7 @@ data "aws_ami" "runner" {
 
   filter {
     name   = "tag:Name"
-    values = ["quic-perf-runner"]
+    values = ["quic-perf-runner-amd64"]
   }
 
   filter {

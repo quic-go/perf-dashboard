@@ -11,6 +11,11 @@ on:
       - "orchestrator/**"
   workflow_dispatch:
 
+concurrency:
+  group: cloud-artifacts
+  cancel-in-progress: false
+  queue: max
+
 permissions:
   contents: read
 
@@ -24,6 +29,12 @@ env:
 jobs:
   validate:
     name: Validate
+    strategy:
+      fail-fast: false
+      matrix:
+        architecture: [amd64, arm64]
+    env:
+      PKR_VAR_architecture: ${{ matrix.architecture }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -47,17 +58,21 @@ jobs:
 
   gcp:
     name: Build GCP image
+    strategy:
+      fail-fast: false
+      matrix:
+        architecture: [amd64, arm64]
+    env:
+      PKR_VAR_architecture: ${{ matrix.architecture }}
     needs: validate
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     environment: ${{ github.ref != 'refs/heads/master' && 'cloud-test' || null }}
     outputs:
-      image_id: ${{ steps.manifest.outputs.image_id }}
-      image_size: ${{ steps.image_size.outputs.image_size }}
-    concurrency:
-      group: cloud-gcp
-      cancel-in-progress: false
-      queue: max
+      image_id: ${{ matrix.architecture == 'amd64' && steps.manifest.outputs.image_id || '' }}
+      image_id_arm64: ${{ matrix.architecture == 'arm64' && steps.manifest.outputs.image_id || '' }}
+      image_size: ${{ matrix.architecture == 'amd64' && steps.image_size.outputs.image_size || '' }}
+      image_size_arm64: ${{ matrix.architecture == 'arm64' && steps.image_size.outputs.image_size || '' }}
     permissions:
       contents: read
       id-token: write
@@ -99,17 +114,21 @@ jobs:
 
   aws:
     name: Build AWS image
+    strategy:
+      fail-fast: false
+      matrix:
+        architecture: [amd64, arm64]
+    env:
+      PKR_VAR_architecture: ${{ matrix.architecture }}
     needs: validate
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     environment: ${{ github.ref != 'refs/heads/master' && 'cloud-test' || null }}
     outputs:
-      image_id: ${{ steps.manifest.outputs.image_id }}
-      image_size: ${{ steps.image_size.outputs.image_size }}
-    concurrency:
-      group: cloud-aws
-      cancel-in-progress: false
-      queue: max
+      image_id: ${{ matrix.architecture == 'amd64' && steps.manifest.outputs.image_id || '' }}
+      image_id_arm64: ${{ matrix.architecture == 'arm64' && steps.manifest.outputs.image_id || '' }}
+      image_size: ${{ matrix.architecture == 'amd64' && steps.image_size.outputs.image_size || '' }}
+      image_size_arm64: ${{ matrix.architecture == 'arm64' && steps.image_size.outputs.image_size || '' }}
     permissions:
       contents: read
       id-token: write
@@ -158,16 +177,19 @@ jobs:
 
   azure:
     name: Build Azure image
+    strategy:
+      fail-fast: false
+      matrix:
+        architecture: [amd64, arm64]
+    env:
+      PKR_VAR_architecture: ${{ matrix.architecture }}
     needs: validate
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     environment: ${{ github.ref != 'refs/heads/master' && 'cloud-test' || null }}
     outputs:
-      image_id: ${{ steps.manifest.outputs.image_id }}
-    concurrency:
-      group: cloud-azure
-      cancel-in-progress: false
-      queue: max
+      image_id: ${{ matrix.architecture == 'amd64' && steps.manifest.outputs.image_id || '' }}
+      image_id_arm64: ${{ matrix.architecture == 'arm64' && steps.manifest.outputs.image_id || '' }}
     permissions:
       contents: read
       id-token: write
@@ -181,6 +203,7 @@ jobs:
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       - name: Prepare Azure Compute Gallery
         run: |
+          az sig show --resource-group "${PKR_VAR_azure_resource_group}" --gallery-name quicperfrunner --output none ||
           az sig create \
             --resource-group "${PKR_VAR_azure_resource_group}" \
             --gallery-name quicperfrunner \
@@ -189,9 +212,9 @@ jobs:
           az sig image-definition create \
             --resource-group "${PKR_VAR_azure_resource_group}" \
             --gallery-name quicperfrunner \
-            --gallery-image-definition quic-perf-runner \
-            --publisher quic-go --offer perf-dashboard --sku runner \
-            --os-type Linux --os-state Generalized --architecture x64 \
+            --gallery-image-definition "quic-perf-runner-${PKR_VAR_architecture}" \
+            --publisher quic-go --offer perf-dashboard --sku "runner-${PKR_VAR_architecture}" \
+            --os-type Linux --os-state Generalized --architecture "${{ matrix.architecture == 'amd64' && 'x64' || 'Arm64' }}" \
             --hyper-v-generation V2 --features SecurityType=Standard \
             --tags ManagedBy=packer PackerLifecycle=retained \
             --output none
@@ -210,7 +233,7 @@ jobs:
           az sig image-version update \
             --resource-group "${PKR_VAR_azure_resource_group}" \
             --gallery-name quicperfrunner \
-            --gallery-image-definition quic-perf-runner \
+            --gallery-image-definition "quic-perf-runner-${PKR_VAR_architecture}" \
             --gallery-image-version "${image_id##*/}" \
             --set tags.PackerLifecycle=retained publishingProfile.excludeFromLatest=false \
             --output none
@@ -237,7 +260,9 @@ jobs:
           }
 
           aws_image_size_gb="$(format_gb "${{ needs.aws.outputs.image_size || '' }}")"
+          aws_arm64_image_size_gb="$(format_gb "${{ needs.aws.outputs.image_size_arm64 || '' }}")"
           gcp_image_size_gb="$(format_gb "${{ needs.gcp.outputs.image_size || '' }}")"
+          gcp_arm64_image_size_gb="$(format_gb "${{ needs.gcp.outputs.image_size_arm64 || '' }}")"
 
           cat >> "${GITHUB_STEP_SUMMARY}" <<'EOF'
           ## Image Build Results
@@ -246,7 +271,7 @@ jobs:
           EOF
           cat >> "${GITHUB_STEP_SUMMARY}" <<EOF
           | --- | --- | --- | --- |
-          | AWS | ${{ needs.aws.result }} | ${{ needs.aws.outputs.image_id || 'N/A' }} | ${aws_image_size_gb} |
-          | GCP | ${{ needs.gcp.result }} | ${{ needs.gcp.outputs.image_id || 'N/A' }} | ${gcp_image_size_gb} |
-          | Azure | ${{ needs.azure.result }} | ${{ needs.azure.outputs.image_id || 'N/A' }} | --- |
+          | AWS | ${{ needs.aws.result }} | amd64: ${{ needs.aws.outputs.image_id || 'N/A' }}<br>arm64: ${{ needs.aws.outputs.image_id_arm64 || 'N/A' }} | amd64: ${aws_image_size_gb}<br>arm64: ${aws_arm64_image_size_gb} |
+          | GCP | ${{ needs.gcp.result }} | amd64: ${{ needs.gcp.outputs.image_id || 'N/A' }}<br>arm64: ${{ needs.gcp.outputs.image_id_arm64 || 'N/A' }} | amd64: ${gcp_image_size_gb}<br>arm64: ${gcp_arm64_image_size_gb} |
+          | Azure | ${{ needs.azure.result }} | amd64: ${{ needs.azure.outputs.image_id || 'N/A' }}<br>arm64: ${{ needs.azure.outputs.image_id_arm64 || 'N/A' }} | --- |
           EOF
