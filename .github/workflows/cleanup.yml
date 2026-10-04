@@ -9,6 +9,11 @@ on:
         type: boolean
         default: true
 
+concurrency:
+  group: cloud-artifacts
+  cancel-in-progress: false
+  queue: max
+
 permissions:
   id-token: write
   contents: read
@@ -66,14 +71,16 @@ jobs:
             done <<< "${image_ids}"
           }
 
-          delete_aws_images "us-west-2" "old AWS AMIs" "$(aws ec2 describe-images \
-            --region us-west-2 \
-            --owners self \
-            --filters "Name=tag:ManagedBy,Values=packer" "Name=tag:Name,Values=quic-perf-runner" \
-            --query 'sort_by(Images, &CreationDate)[:-1].ImageId' \
-            --output text \
-            | tr '\t' '\n' \
-            | sed '/^$/d')"
+          delete_aws_images "us-west-2" "old AWS AMIs" "$(for architecture in amd64 arm64; do
+            aws ec2 describe-images \
+              --region us-west-2 \
+              --owners self \
+              --filters "Name=tag:ManagedBy,Values=packer" "Name=tag:Name,Values=quic-perf-runner-${architecture}" \
+              --query 'sort_by(Images, &CreationDate)[:-1].ImageId' \
+              --output text \
+              | tr '\t' '\n' \
+              | sed '/^$/d'
+          done)"
 
           for region in $(aws ec2 describe-regions --query 'Regions[].RegionName' --output text); do
             mapfile -t instance_ids < <(aws ec2 describe-instances \
@@ -159,12 +166,14 @@ jobs:
         run: |
           set -euo pipefail
 
-          image_names="$(gcloud compute images list \
-            --filter="family=quic-perf-runner" \
-            --sort-by="~creationTimestamp" \
-            --format="value(name)" \
-            | tail -n +2 \
-            | sed '/^$/d')"
+          image_names="$(for architecture in amd64 arm64; do
+            gcloud compute images list \
+              --filter="family=quic-perf-runner-${architecture}" \
+              --sort-by="~creationTimestamp" \
+              --format="value(name)" \
+              | tail -n +2 \
+              | sed '/^$/d'
+          done)"
 
           if [ -z "${image_names}" ]; then
             echo "No old GCP images to delete."
@@ -224,19 +233,21 @@ jobs:
             --query "[?tags.ManagedBy=='packer' && tags.PackerLifecycle=='temporary'].id" \
             --output tsv)"
 
-          if [ -n "$(az sig list --resource-group "${AZURE_RESOURCE_GROUP}" --query "[?name=='quicperfrunner'].name" --output tsv)" ] &&
-             [ -n "$(az sig image-definition list --resource-group "${AZURE_RESOURCE_GROUP}" --gallery-name quicperfrunner --query "[?name=='quic-perf-runner'].name" --output tsv)" ]; then
-            image_versions="$(az sig image-version list \
-              --resource-group "${AZURE_RESOURCE_GROUP}" \
-              --gallery-name quicperfrunner --gallery-image-definition quic-perf-runner \
-              --output json)"
-            delete_resources "old or temporary Azure gallery versions" "$(jq -r '
-              map(select(.tags.ManagedBy == "packer")) |
-              (map(select(.tags.PackerLifecycle == "retained" and .publishingProfile.excludeFromLatest == false)) |
-                sort_by(.name | split(".") | map(tonumber)) | last.id) as $latest |
-              .[] | select(.id != $latest and (.tags.PackerLifecycle == "retained" or .tags.PackerLifecycle == "temporary")) | .id
-            ' <<< "${image_versions}")"
-          fi
+          for architecture in amd64 arm64; do
+            if [ -n "$(az sig list --resource-group "${AZURE_RESOURCE_GROUP}" --query "[?name=='quicperfrunner'].name" --output tsv)" ] &&
+               [ -n "$(az sig image-definition list --resource-group "${AZURE_RESOURCE_GROUP}" --gallery-name quicperfrunner --query "[?name=='quic-perf-runner-${architecture}'].name" --output tsv)" ]; then
+              image_versions="$(az sig image-version list \
+                --resource-group "${AZURE_RESOURCE_GROUP}" \
+                --gallery-name quicperfrunner --gallery-image-definition "quic-perf-runner-${architecture}" \
+                --output json)"
+              delete_resources "old or temporary Azure gallery versions" "$(jq -r '
+                map(select(.tags.ManagedBy == "packer")) |
+                (map(select(.tags.PackerLifecycle == "retained" and .publishingProfile.excludeFromLatest == false)) |
+                  sort_by(.name | split(".") | map(tonumber)) | last.id) as $latest |
+                .[] | select(.id != $latest and (.tags.PackerLifecycle == "retained" or .tags.PackerLifecycle == "temporary")) | .id
+              ' <<< "${image_versions}")"
+            fi
+          done
 
           vm_resources="$(az vm list \
             --resource-group "${AZURE_RESOURCE_GROUP}" \

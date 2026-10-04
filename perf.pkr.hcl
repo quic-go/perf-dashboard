@@ -25,6 +25,17 @@ variable "go_version" {
   default     = "1.26.2"
 }
 
+variable "architecture" {
+  type        = string
+  description = "Runner CPU architecture"
+  default     = "amd64"
+
+  validation {
+    condition     = contains(["amd64", "arm64"], var.architecture)
+    error_message = "Architecture must be amd64 or arm64."
+  }
+}
+
 variable "build_commit" {
   type        = string
   description = "perf-dashboard commit used to build the image"
@@ -59,13 +70,14 @@ variable "ssh_public_keys_additional" {
 }
 
 locals {
-  image_name = "quic-perf-runner-${formatdate("YYYYMMDDhhmmss", timestamp())}"
+  image_name   = "quic-perf-runner-${var.architecture}-${formatdate("YYYYMMDDhhmmss", timestamp())}"
+  image_family = "quic-perf-runner-${var.architecture}"
 }
 
 # The Docker image is only used for local development.
 source "docker" "ubuntu" {
   image    = "ubuntu:24.04"
-  platform = "linux/amd64"
+  platform = "linux/${var.architecture}"
   commit   = true
 
   changes = [
@@ -80,7 +92,7 @@ source "amazon-ebs" "ubuntu" {
 
   source_ami_filter {
     filters = {
-      name                = "ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*"
+      name                = "ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-${var.architecture}-server-*"
       root-device-type    = "ebs"
       virtualization-type = "hvm"
     }
@@ -90,7 +102,7 @@ source "amazon-ebs" "ubuntu" {
 
   ami_name        = local.image_name
   ami_description = "QUIC perf runner"
-  instance_type   = "c6i.large"
+  instance_type   = var.architecture == "arm64" ? "c7g.large" : "c6i.large"
   ssh_username    = "ubuntu"
 
   launch_block_device_mappings {
@@ -101,20 +113,20 @@ source "amazon-ebs" "ubuntu" {
   }
 
   tags = {
-    Name      = "quic-perf-runner"
+    Name      = local.image_family
     ManagedBy = "packer"
   }
 }
 
 source "googlecompute" "ubuntu" {
   project_id = var.gcp_project_id
-  zone       = "us-west1-b"
+  zone       = var.architecture == "arm64" ? "us-central1-a" : "us-west1-b"
 
-  source_image_family = "ubuntu-2404-lts-amd64"
+  source_image_family = "ubuntu-2404-lts-${var.architecture}"
   image_name          = local.image_name
-  image_family        = "quic-perf-runner"
+  image_family        = local.image_family
 
-  machine_type = "e2-medium"
+  machine_type = var.architecture == "arm64" ? "t2a-standard-2" : "e2-medium"
   disk_size    = 20 # GB
 
   ssh_username = "packer"
@@ -133,7 +145,7 @@ source "azure-arm" "ubuntu" {
   shared_image_gallery_destination {
     resource_group = var.azure_resource_group
     gallery_name   = "quicperfrunner"
-    image_name     = "quic-perf-runner"
+    image_name     = local.image_family
     image_version  = format("%s.%d.0", formatdate("YYYYMMDD", timestamp()), formatdate("hhmmss", timestamp()))
   }
   shared_gallery_image_version_exclude_from_latest = true
@@ -141,10 +153,10 @@ source "azure-arm" "ubuntu" {
   os_type         = "Linux"
   image_publisher = "Canonical"
   image_offer     = "ubuntu-24_04-lts"
-  image_sku       = "server"
+  image_sku       = var.architecture == "arm64" ? "server-arm64" : "server"
   image_version   = "latest"
 
-  vm_size         = "Standard_D2s_v5"
+  vm_size         = var.architecture == "arm64" ? "Standard_D2ps_v5" : "Standard_D2s_v5"
   os_disk_size_gb = 30
 
   # Azure builds use an existing resource group, so tag leftovers for cleanup.
@@ -201,7 +213,7 @@ build {
     inline = [
       "set -eux",
       "echo '=== Installing Go ${var.go_version} ==='",
-      "curl -fsSL 'https://go.dev/dl/go${var.go_version}.linux-amd64.tar.gz' -o /tmp/go.tar.gz",
+      "curl -fsSL 'https://go.dev/dl/go${var.go_version}.linux-${var.architecture}.tar.gz' -o /tmp/go.tar.gz",
       "sudo tar -C /usr/local -xzf /tmp/go.tar.gz",
       "rm /tmp/go.tar.gz",
       "sudo ln -sf /usr/local/go/bin/go /usr/local/bin/go",
@@ -251,6 +263,7 @@ build {
       jq -n \
         --arg built_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
         --arg build_commit "$BUILD_COMMIT" \
+        --arg architecture "${var.architecture}" \
         --arg perf_commit "$(sudo git -C /opt/quic-go/perf rev-parse HEAD)" \
         --arg quic_go_commit "$(sudo git -C /opt/quic-go/quic-go rev-parse HEAD)" \
         --arg msquic_commit "$(sudo git -C /opt/msquic rev-parse HEAD)" \
@@ -260,6 +273,7 @@ build {
           schema_version: 1,
           built_at: $built_at,
           perf_dashboard_commit: $build_commit,
+          architecture: $architecture,
           implementations: {
             "quic-go": {commit: $quic_go_commit, perf_commit: $perf_commit, go_version: $go_version},
             "msquic": {commit: $msquic_commit, cxx_version: $cxx_version}

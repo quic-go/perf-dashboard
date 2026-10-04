@@ -1,7 +1,7 @@
 data "azurerm_shared_image_version" "runner" {
   name                    = "latest"
   gallery_name            = "quicperfrunner"
-  image_name              = "quic-perf-runner"
+  image_name              = "quic-perf-runner-amd64"
   resource_group_name     = var.azure_resource_group
   sort_versions_by_semver = true
 }

@@ -6,9 +6,9 @@ The setup keeps runs repeatable by building AWS, GCP, and Azure runner images up
 
 ## Workflows
 
-- [`.github/workflows/packer.yml`](.github/workflows/packer.yml) builds new runner images on AWS, GCP and Azure.
+- [`.github/workflows/packer.yml`](.github/workflows/packer.yml) builds amd64 and arm64 runner images in parallel on AWS, GCP and Azure.
 - [`.github/workflows/benchmark.yml`](.github/workflows/benchmark.yml) creates temporary server and client nodes and runs the implementation matrix.
-- [`.github/workflows/cleanup.yml`](.github/workflows/cleanup.yml) deletes old runner images and abandoned benchmark resources.
+- [`.github/workflows/cleanup.yml`](.github/workflows/cleanup.yml) retains the newest image for each architecture and deletes older images and abandoned benchmark resources.
 
 ## Testing image builds from a Pull Request
 
