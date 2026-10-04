@@ -224,10 +224,19 @@ jobs:
             --query "[?tags.ManagedBy=='packer' && tags.PackerLifecycle=='temporary'].id" \
             --output tsv)"
 
-          delete_resources "old Azure images" "$(az image list \
-            --resource-group "${AZURE_RESOURCE_GROUP}" \
-            --query "sort_by([?tags.ManagedBy=='packer' && starts_with(name, 'quic-perf-runner-') && not_null(tags.PackerLifecycle, 'retained')!='temporary'], &name)[:-1].id" \
-            --output tsv)"
+          if [ -n "$(az sig list --resource-group "${AZURE_RESOURCE_GROUP}" --query "[?name=='quicperfrunner'].name" --output tsv)" ] &&
+             [ -n "$(az sig image-definition list --resource-group "${AZURE_RESOURCE_GROUP}" --gallery-name quicperfrunner --query "[?name=='quic-perf-runner'].name" --output tsv)" ]; then
+            image_versions="$(az sig image-version list \
+              --resource-group "${AZURE_RESOURCE_GROUP}" \
+              --gallery-name quicperfrunner --gallery-image-definition quic-perf-runner \
+              --output json)"
+            delete_resources "old or temporary Azure gallery versions" "$(jq -r '
+              map(select(.tags.ManagedBy == "packer")) |
+              (map(select(.tags.PackerLifecycle == "retained" and .publishingProfile.excludeFromLatest == false)) |
+                sort_by(.name | split(".") | map(tonumber)) | last.id) as $latest |
+              .[] | select(.id != $latest and (.tags.PackerLifecycle == "retained" or .tags.PackerLifecycle == "temporary")) | .id
+            ' <<< "${image_versions}")"
+          fi
 
           vm_resources="$(az vm list \
             --resource-group "${AZURE_RESOURCE_GROUP}" \
@@ -249,7 +258,8 @@ jobs:
             Microsoft.Network/virtualNetworks \
             Microsoft.Compute/galleries/images/versions \
             Microsoft.Compute/galleries/images \
-            Microsoft.Compute/galleries; do
+            Microsoft.Compute/galleries \
+            Microsoft.Resources/deployments; do
             delete_resources "Azure ${resource_type}" "$(az resource list \
               --resource-group "${AZURE_RESOURCE_GROUP}" \
               --resource-type "${resource_type}" \

@@ -128,9 +128,15 @@ source "googlecompute" "ubuntu" {
 source "azure-arm" "ubuntu" {
   use_azure_cli_auth = true
 
-  build_resource_group_name         = var.azure_resource_group
-  managed_image_resource_group_name = var.azure_resource_group
-  managed_image_name                = local.image_name
+  build_resource_group_name = var.azure_resource_group
+
+  shared_image_gallery_destination {
+    resource_group = var.azure_resource_group
+    gallery_name   = "quicperfrunner"
+    image_name     = "quic-perf-runner"
+    image_version  = format("%s.%d.0", formatdate("YYYYMMDD", timestamp()), formatdate("hhmmss", timestamp()))
+  }
+  shared_gallery_image_version_exclude_from_latest = true
 
   os_type         = "Linux"
   image_publisher = "Canonical"
@@ -141,12 +147,8 @@ source "azure-arm" "ubuntu" {
   vm_size         = "Standard_D2s_v5"
   os_disk_size_gb = 30
 
-  # This lifecycle tag is Azure-only on purpose. AWS and GCP use Packer's normal
-  # temporary resource cleanup, and our cleanup workflow only prunes their final
-  # images. Azure builds run in our existing resource group because the service
-  # principal is scoped there; if Packer or CI dies before Packer can clean up,
-  # resources can be left behind. The workflow retags the final managed image as
-  # retained after a successful build and deletes temporary leftovers later.
+  # Azure builds use an existing resource group, so tag leftovers for cleanup.
+  # The workflow retains and publishes the gallery version after a successful build.
   azure_tags = {
     ManagedBy       = "packer"
     PackerLifecycle = "temporary"
@@ -303,9 +305,6 @@ build {
 
   post-processor "manifest" {
     output = "packer-manifest.json"
-    custom_data = {
-      image_name = local.image_name
-    }
   }
 
   post-processor "docker-tag" {

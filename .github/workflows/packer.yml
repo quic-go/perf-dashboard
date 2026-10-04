@@ -179,6 +179,22 @@ jobs:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Prepare Azure Compute Gallery
+        run: |
+          az sig create \
+            --resource-group "${PKR_VAR_azure_resource_group}" \
+            --gallery-name quicperfrunner \
+            --tags ManagedBy=packer PackerLifecycle=retained \
+            --output none
+          az sig image-definition create \
+            --resource-group "${PKR_VAR_azure_resource_group}" \
+            --gallery-name quicperfrunner \
+            --gallery-image-definition quic-perf-runner \
+            --publisher quic-go --offer perf-dashboard --sku runner \
+            --os-type Linux --os-state Generalized --architecture x64 \
+            --hyper-v-generation V2 --features SecurityType=Standard \
+            --tags ManagedBy=packer PackerLifecycle=retained \
+            --output none
       - uses: hashicorp/setup-packer@ce93c3c08a6c2ff2275bf4b54ff0d9a75f6c9789 # v3.4.0
         with:
           version: "1.15.2"
@@ -186,27 +202,16 @@ jobs:
         run: packer init .
       - name: packer build
         run: packer build -color=false -only=azure-arm.ubuntu .
-      - name: Read Packer manifest
+      - name: Retain Azure image version and include it in latest
         id: manifest
         run: |
           set -euo pipefail
-          IMAGE_NAME="$(jq -r '.builds[-1].custom_data.image_name // empty' packer-manifest.json)"
-          if [ -z "${IMAGE_NAME}" ]; then
-            echo "Could not find image_name in Packer manifest" >&2
-            jq . packer-manifest.json >&2 || true
-            exit 1
-          fi
-          echo "image_id=${IMAGE_NAME}" >> "${GITHUB_OUTPUT}"
-      - name: Mark Azure image as retained
-        env:
-          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
-        run: |
-          az tag update \
-            --resource-id "/subscriptions/${AZURE_SUBSCRIPTION_ID}/resourceGroups/${AZURE_RESOURCE_GROUP}/providers/Microsoft.Compute/images/${{ steps.manifest.outputs.image_id }}" \
-            --operation Merge \
-            --tags PackerLifecycle=retained \
+          image_id="$(jq -er '.builds[-1].artifact_id | select(type == "string" and length > 0)' packer-manifest.json)"
+          az sig image-version update --ids "${image_id}" \
+            --set tags.PackerLifecycle=retained \
+            --exclude-from-latest false \
             --output none
+          echo "image_id=${image_id}" >> "${GITHUB_OUTPUT}"
 
   summary:
     name: Build summary
@@ -214,7 +219,7 @@ jobs:
     if: always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     steps:
-      # Azure managed images expose provisioned disk size, not a comparable
+      # Azure images expose provisioned disk size, not a comparable
       # actual image byte count, so the summary intentionally uses a placeholder.
       - name: Write build summary
         run: |
