@@ -4,7 +4,7 @@ This directory contains one Terraform root per cloud provider; the benchmark wor
 
 - `infra/aws`: launches an EC2 node from the latest `quic-perf-runner` AMI in `aws_source_region`, copying it to `location` when needed.
 - `infra/gcp`: launches a Compute Engine node from the `quic-perf-runner` image family.
-- `infra/azure`: launches an Azure VM from the latest retained managed image, creating a temporary Compute Gallery copy when needed.
+- `infra/azure`: launches an Azure VM from the latest published version in the `quicperfrunner` Compute Gallery, creating a temporary regional copy when needed.
 
 Common variables:
 

@@ -1,25 +1,17 @@
-data "azurerm_images" "runner" {
-  resource_group_name = var.azure_resource_group
-
-  tags_filter = {
-    ManagedBy       = "packer"
-    PackerLifecycle = "retained"
-  }
-}
-
-data "azurerm_image" "runner" {
-  name                = local.source_image_name
-  resource_group_name = var.azure_resource_group
+data "azurerm_shared_image_version" "runner" {
+  name                    = "latest"
+  gallery_name            = "quicperfrunner"
+  image_name              = "quic-perf-runner"
+  resource_group_name     = var.azure_resource_group
+  sort_versions_by_semver = true
 }
 
 locals {
-  image_names        = sort([for image in data.azurerm_images.runner.images : image.name if startswith(image.name, "quic-perf-runner-")])
-  source_image_name  = local.image_names[length(local.image_names) - 1]
-  source_location    = data.azurerm_image.runner.location
-  source_image_id    = data.azurerm_image.runner.id
+  source_location    = data.azurerm_shared_image_version.runner.location
+  source_image_id    = data.azurerm_shared_image_version.runner.id
   needs_image_copy   = var.location != local.source_location
   gallery_name       = "quicperfrunner${substr(md5(var.name), 0, 12)}"
-  vm_source_image_id = local.needs_image_copy ? azurerm_shared_image_version.runner[0].id : local.source_image_id
+  vm_source_image_id = local.needs_image_copy ? "${azurerm_shared_image.runner[0].id}/versions/1.0.0" : local.source_image_id
   benchmark_tags = {
     ManagedBy = "perf-dashboard"
     RunId     = var.name
@@ -53,32 +45,34 @@ resource "azurerm_shared_image" "runner" {
   tags = local.benchmark_tags
 }
 
-resource "azurerm_shared_image_version" "runner" {
+# AzureRM's shared_image_version only accepts managed images or VMs as sources.
+# A template lets us copy a gallery version without adding another provider.
+resource "azurerm_resource_group_template_deployment" "runner" {
   count               = local.needs_image_copy ? 1 : 0
-  name                = "1.0.0"
-  gallery_name        = azurerm_shared_image_gallery.runner[0].name
-  image_name          = azurerm_shared_image.runner[0].name
+  name                = "${var.name}-image"
   resource_group_name = var.azure_resource_group
-  location            = local.source_location
-  managed_image_id    = local.source_image_id
+  deployment_mode     = "Incremental"
 
-  deletion_of_replicated_locations_enabled = true
-
-  target_region {
-    name                   = local.source_location
-    regional_replica_count = 1
-    storage_account_type   = "Standard_LRS"
-  }
-
-  dynamic "target_region" {
-    for_each = var.location == local.source_location ? [] : [var.location]
-
-    content {
-      name                   = target_region.value
-      regional_replica_count = 1
-      storage_account_type   = "Standard_LRS"
-    }
-  }
+  template_content = jsonencode({
+    "$schema"      = "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#"
+    contentVersion = "1.0.0.0"
+    resources = [{
+      type       = "Microsoft.Compute/galleries/images/versions"
+      apiVersion = "2023-07-03"
+      name       = "${azurerm_shared_image_gallery.runner[0].name}/${azurerm_shared_image.runner[0].name}/1.0.0"
+      location   = local.source_location
+      tags       = local.benchmark_tags
+      properties = {
+        storageProfile = { source = { id = local.source_image_id } }
+        publishingProfile = {
+          replicaCount       = 1
+          storageAccountType = "Standard_LRS"
+          targetRegions      = [for region in [local.source_location, var.location] : { name = region }]
+        }
+        safetyProfile = { allowDeletionOfReplicatedLocations = true }
+      }
+    }]
+  })
 
   tags = local.benchmark_tags
 
@@ -183,5 +177,8 @@ resource "azurerm_linux_virtual_machine" "node" {
     create = "10m"
   }
 
-  depends_on = [azurerm_network_interface_security_group_association.node]
+  depends_on = [
+    azurerm_network_interface_security_group_association.node,
+    azurerm_resource_group_template_deployment.runner,
+  ]
 }
