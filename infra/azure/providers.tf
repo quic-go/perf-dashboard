@@ -6,6 +6,7 @@ provider "azurerm" {
     persist_id_on_create_before_polling_for_completion = true
 
     virtual_machine {
+      delete_os_disk_on_deletion     = true
       skip_shutdown_and_force_delete = true
     }
   }
