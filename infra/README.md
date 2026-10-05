@@ -2,15 +2,16 @@
 
 This directory contains one Terraform root per cloud provider; the benchmark workflow selects the root using `cloud_provider`.
 
-- `infra/aws`: launches an EC2 node from the latest `quic-perf-runner-amd64` AMI in `aws_source_region`, copying it to `location` when needed.
-- `infra/gcp`: launches a Compute Engine node from the `quic-perf-runner-amd64` image family.
-- `infra/azure`: launches an Azure VM from the latest published version of `quic-perf-runner-amd64` in the `quicperfrunner` Compute Gallery, creating a temporary regional copy when needed.
+- `infra/aws`: launches an EC2 node from the latest `quic-perf-runner-<architecture>` AMI in `aws_source_region`, copying it to `location` when needed.
+- `infra/gcp`: launches a Compute Engine node from the `quic-perf-runner-<architecture>` image family.
+- `infra/azure`: launches an Azure VM from the latest published version of `quic-perf-runner-<architecture>` in the `quicperfrunner` Compute Gallery, creating a temporary regional copy when needed.
 
 Common variables:
 
 - `name`: unique name for the node and temporary resources.
 - `location`: AWS region, GCP zone, or Azure region.
 - `machine_type`: VM type. The benchmark workflow exposes optional `server_machine_type` and `client_machine_type` inputs to configure each node independently.
+- `architecture`: `amd64` (default) or `arm64`. The create-node action detects this from the selected machine type; set it explicitly when using Terraform directly. The default machine types are all AMD64.
 
 Provider variables:
 

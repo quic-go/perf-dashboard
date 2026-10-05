@@ -33,6 +33,27 @@ runs:
 
         if [[ -n "${MACHINE_TYPE}" ]]; then
           export TF_VAR_machine_type="${MACHINE_TYPE}"
+          case "${CLOUD_PROVIDER}" in
+            aws)
+              architecture="$(aws ec2 describe-instance-types --region "${TF_VAR_location}" --instance-types "${MACHINE_TYPE}" \
+                --query "InstanceTypes[0].ProcessorInfo.SupportedArchitectures[?@=='arm64' || @=='x86_64'] | [0]" --output text)"
+              ;;
+            gcp)
+              architecture="$(gcloud compute machine-types describe "${MACHINE_TYPE}" --project "${TF_VAR_gcp_project_id}" \
+                --zone "${TF_VAR_location}" --format='value(architecture)')"
+              # Older x86 machine types omit the architecture field.
+              architecture="${architecture:-X86_64}"
+              ;;
+            azure)
+              architecture="$(az vm list-skus --location "${TF_VAR_location}" --resource-type virtualMachines --size "${MACHINE_TYPE}" --all \
+                --query "[?name=='${MACHINE_TYPE}'].capabilities[] | [?name=='CpuArchitectureType'].value | [0]" --output tsv)"
+              ;;
+          esac
+          case "${architecture}" in
+            arm64|ARM64|Arm64) export TF_VAR_architecture=arm64 ;;
+            x86_64|X86_64|x64) export TF_VAR_architecture=amd64 ;;
+            *) echo "Unsupported CPU architecture: ${architecture}" >&2; exit 1 ;;
+          esac
         fi
 
         node_dir="${RUNNER_TEMP}/${ROLE}-node"

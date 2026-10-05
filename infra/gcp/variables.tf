@@ -11,6 +11,11 @@ variable "machine_type" {
   default = "e2-medium"
 }
 
+variable "architecture" {
+  type    = string
+  default = "amd64"
+}
+
 variable "gcp_project_id" {
   type = string
 }
