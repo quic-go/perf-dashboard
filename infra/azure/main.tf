@@ -1,7 +1,7 @@
 data "azurerm_shared_image_version" "runner" {
   name                    = "latest"
   gallery_name            = "quicperfrunner"
-  image_name              = "quic-perf-runner-amd64"
+  image_name              = "quic-perf-runner-${var.architecture}"
   resource_group_name     = var.azure_resource_group
   sort_versions_by_semver = true
 }
@@ -35,6 +35,7 @@ resource "azurerm_shared_image" "runner" {
   location            = local.source_location
   os_type             = "Linux"
   hyper_v_generation  = "V2"
+  architecture        = var.architecture == "arm64" ? "Arm64" : "x64"
 
   identifier {
     publisher = "quic-go"

@@ -11,6 +11,11 @@ variable "machine_type" {
   default = "c6i.large"
 }
 
+variable "architecture" {
+  type    = string
+  default = "amd64"
+}
+
 variable "aws_source_region" {
   type    = string
   default = "us-west-2"

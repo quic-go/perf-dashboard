@@ -11,6 +11,11 @@ variable "machine_type" {
   default = "Standard_D2s_v5"
 }
 
+variable "architecture" {
+  type    = string
+  default = "amd64"
+}
+
 variable "azure_subscription_id" {
   type = string
 }

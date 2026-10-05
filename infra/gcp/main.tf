@@ -1,5 +1,5 @@
 data "google_compute_image" "runner" {
-  family  = "quic-perf-runner-amd64"
+  family  = "quic-perf-runner-${var.architecture}"
   project = var.gcp_project_id
 }
 
@@ -34,7 +34,6 @@ resource "google_compute_instance" "node" {
     initialize_params {
       image = data.google_compute_image.runner.self_link
       size  = 20
-      type  = "pd-balanced"
     }
   }
 
