@@ -2,8 +2,9 @@ import io
 import json
 import unittest
 from contextlib import redirect_stdout
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
+from msquic import MsQuicImplementation
 from msquic import _parse_result as parse_msquic_result
 from quic_go import _parse_result as parse_quic_go_result
 from quic_implementation import HandshakeResult, SSHNode, ThroughputResult
@@ -11,6 +12,20 @@ from run_benchmark import main
 
 
 class RunBenchmarkTest(unittest.TestCase):
+    def test_large_msquic_download(self) -> None:
+        client = Mock()
+        client.run.return_value.stdout = (
+            "Result: Download 20000000000 bytes @ 8000000 kbps (20000.000 ms)."
+        )
+        client.run.return_value.stderr = ""
+        result = MsQuicImplementation().run_throughput_test(
+            client, "server", 20_000_000_000
+        )
+        self.assertEqual(result.bytes, 20_000_000_000)
+        self.assertIn("-down:20gb", client.run.call_args.args[0])
+        with self.assertRaises(ValueError):
+            MsQuicImplementation().run_throughput_test(client, "server", 20_000_000_001)
+
     def test_downloads(self) -> None:
         quic_go_output = (
             "progress log\n"
