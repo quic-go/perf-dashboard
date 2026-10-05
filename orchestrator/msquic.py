@@ -43,6 +43,14 @@ class MsQuicImplementation(QuicImplementation):
         server_address: str,
         download_bytes: int,
     ) -> ThroughputResult:
+        # secnetperf parses the number with atoi before applying the unit.
+        size, unit = download_bytes, ""
+        for next_unit in ("kb", "mb", "gb"):
+            if size % 1000:
+                break
+            size, unit = size // 1000, next_unit
+        if size > 2_147_483_647:
+            raise ValueError("MsQuic cannot represent this download size exactly")
         completed = client.run(
             (
                 "/opt/msquic/build/bin/Release/secnetperf",
@@ -50,7 +58,7 @@ class MsQuicImplementation(QuicImplementation):
                 "-port:4433",
                 "-exec:maxtput",
                 "-up:0",
-                f"-down:{download_bytes}",
+                f"-down:{size}{unit}",
                 "-pctput:1",
             ),
             capture_output=True,
