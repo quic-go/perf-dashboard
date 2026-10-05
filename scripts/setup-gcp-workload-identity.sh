@@ -15,6 +15,19 @@ gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
   --role="roles/compute.instanceAdmin.v1" \
   --condition=None
 
+# Compute Instance Admin already grants firewall reads and operation polling.
+gcloud iam roles create perfDashboardFirewallAdmin \
+  --project="${PROJECT_ID}" \
+  --title="Perf Dashboard Firewall Admin" \
+  --description="Manage firewall rules for benchmark nodes" \
+  --permissions=compute.firewalls.create,compute.firewalls.delete,compute.firewalls.update,compute.networks.updatePolicy \
+  --stage=GA
+
+gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+  --member="serviceAccount:${SERVICE_ACCOUNT}" \
+  --role="projects/${PROJECT_ID}/roles/perfDashboardFirewallAdmin" \
+  --condition=None
+
 gcloud iam workload-identity-pools create github-actions \
   --project="${PROJECT_ID}" \
   --location=global \
