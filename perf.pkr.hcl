@@ -192,6 +192,16 @@ build {
     ]
   }
 
+  # Raise socket buffer limits to 16 MiB.
+  provisioner "shell" {
+    except = ["docker.ubuntu"]
+    inline = [
+      "set -eu",
+      "printf '%s\\n' 'net.core.rmem_max = 16777216' 'net.core.wmem_max = 16777216' | sudo tee /etc/sysctl.d/99-quic-perf.conf >/dev/null",
+      "sudo sysctl -p /etc/sysctl.d/99-quic-perf.conf",
+    ]
+  }
+
   provisioner "shell" {
     environment_vars = [
       "AUTHORIZED_SSH_PUBLIC_KEYS=${join("\n", concat([var.ssh_public_key_primary], var.ssh_public_keys_additional))}",
