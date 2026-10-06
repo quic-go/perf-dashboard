@@ -192,7 +192,7 @@ build {
     ]
   }
 
-  # VM images need persistent limits; Docker uses the host kernel settings.
+  # Raise socket buffer limits to 16 MiB.
   provisioner "shell" {
     except = ["docker.ubuntu"]
     inline = [
