@@ -30,6 +30,9 @@ jobs:
       cancel-in-progress: false
       queue: max
     steps:
+      - &cleanup_cutoff
+        name: Set cleanup cutoff to 24 hours ago
+        run: echo "CLEANUP_BEFORE=$(date -u --date='1 day ago' +%Y-%m-%dT%H:%M:%S)" >> "${GITHUB_ENV}"
       - name: Configure AWS
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
@@ -76,7 +79,7 @@ jobs:
               --region us-west-2 \
               --owners self \
               --filters "Name=tag:ManagedBy,Values=packer" "Name=tag:Name,Values=quic-perf-runner-${architecture}" \
-              --query 'sort_by(Images, &CreationDate)[:-1].ImageId' \
+              --query "sort_by(Images, &CreationDate)[:-1] | [?CreationDate < '${CLEANUP_BEFORE}'].ImageId" \
               --output text \
               | tr '\t' '\n' \
               | sed '/^$/d'
@@ -87,7 +90,7 @@ jobs:
               --region "${region}" \
               --filters "Name=tag:ManagedBy,Values=perf-dashboard" \
               --output json \
-              | jq -r '.Reservations[].Instances[] | select(.State.Name != "terminated") | select(any(.Tags[]?; .Key == "RunId" and (.Value | startswith("quic-perf-aws-")))) | .InstanceId')
+              | jq --arg cutoff "${CLEANUP_BEFORE}" -r '.Reservations[].Instances[] | select(.State.Name != "terminated" and .LaunchTime != null and .LaunchTime < $cutoff) | select(any(.Tags[]?; .Key == "RunId" and (.Value | startswith("quic-perf-aws-")))) | .InstanceId')
 
             for instance_id in "${instance_ids[@]}"; do
               if [ "${DRY_RUN}" = "true" ]; then
@@ -106,7 +109,7 @@ jobs:
               --region "${region}" \
               --filters "Name=tag:ManagedBy,Values=perf-dashboard" \
               --output json \
-              | jq -r '.SecurityGroups[] | select(any(.Tags[]?; .Key == "RunId" and (.Value | startswith("quic-perf-aws-")))) | .GroupId')
+              | jq --arg cutoff "${CLEANUP_BEFORE}" -r '.SecurityGroups[] | select(any(.Tags[]?; .Key == "CreatedAt" and (.Value // "") != "" and .Value < $cutoff)) | select(any(.Tags[]?; .Key == "RunId" and (.Value | startswith("quic-perf-aws-")))) | .GroupId')
 
             for group_id in "${group_ids[@]}"; do
               if [ "${DRY_RUN}" = "true" ]; then
@@ -122,7 +125,7 @@ jobs:
               --owners self \
               --filters "Name=tag:ManagedBy,Values=perf-dashboard" "Name=tag:Name,Values=quic-perf-runner" \
               --output json \
-              | jq -r '.Images[] | select(any(.Tags[]?; .Key == "RunId" and (.Value | startswith("quic-perf-aws-")))) | .ImageId')"
+              | jq --arg cutoff "${CLEANUP_BEFORE}" -r '.Images[] | select(.CreationDate != null and .CreationDate < $cutoff) | select(any(.Tags[]?; .Key == "RunId" and (.Value | startswith("quic-perf-aws-")))) | .ImageId')"
           done
 
   cleanup-gcp:
@@ -135,6 +138,7 @@ jobs:
     env:
       CLOUDSDK_CORE_PROJECT: ${{ vars.GCP_PROJECT_ID }}
     steps:
+      - *cleanup_cutoff
       - name: Authenticate to GCP
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
         with:
@@ -145,7 +149,7 @@ jobs:
           set -euo pipefail
 
           instances="$(gcloud compute instances list \
-            --filter="labels.managed_by=perf-dashboard" \
+            --filter="labels.managed_by=perf-dashboard AND creationTimestamp < '${CLEANUP_BEFORE}Z'" \
             --format=json \
             | jq -r '.[] | select((.labels.run_id // "") | startswith("quic-perf-gcp-")) | [(.zone | split("/")[-1]), .name] | @tsv')"
 
@@ -162,7 +166,7 @@ jobs:
               gcloud compute instances delete "${instance_name}" --zone "${zone}" --quiet
             fi
           done <<< "${instances}"
-      - name: Keep only the newest image, delete the rest
+      - name: Delete old images, keeping the newest
         run: |
           set -euo pipefail
 
@@ -170,9 +174,9 @@ jobs:
             gcloud compute images list \
               --filter="family=quic-perf-runner-${architecture}" \
               --sort-by="~creationTimestamp" \
-              --format="value(name)" \
+              --format="value(name,creationTimestamp.date(format='%Y-%m-%dT%H:%M:%S',tz=UTC))" \
               | tail -n +2 \
-              | sed '/^$/d'
+              | awk -v cutoff="${CLEANUP_BEFORE}" 'NF == 2 && $2 < cutoff {print $1}'
           done)"
 
           if [ -z "${image_names}" ]; then
@@ -197,6 +201,7 @@ jobs:
       cancel-in-progress: false
       queue: max
     steps:
+      - *cleanup_cutoff
       - name: Authenticate to Azure
         uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
         with:
@@ -230,7 +235,7 @@ jobs:
 
           delete_resources "Azure temporary Packer resources" "$(az resource list \
             --resource-group "${AZURE_RESOURCE_GROUP}" \
-            --query "[?tags.ManagedBy=='packer' && tags.PackerLifecycle=='temporary'].id" \
+            --query "[?tags.ManagedBy=='packer' && tags.PackerLifecycle=='temporary' && createdTime < '${CLEANUP_BEFORE}'].id" \
             --output tsv)"
 
           for architecture in amd64 arm64; do
@@ -240,18 +245,19 @@ jobs:
                 --resource-group "${AZURE_RESOURCE_GROUP}" \
                 --gallery-name quicperfrunner --gallery-image-definition "quic-perf-runner-${architecture}" \
                 --output json)"
-              delete_resources "old or temporary Azure gallery versions" "$(jq -r '
+              delete_resources "old or temporary Azure gallery versions" "$(jq --arg cutoff "${CLEANUP_BEFORE}" -r '
                 map(select(.tags.ManagedBy == "packer")) |
                 (map(select(.tags.PackerLifecycle == "retained" and .publishingProfile.excludeFromLatest == false)) |
                   sort_by(.name | split(".") | map(tonumber)) | last.id) as $latest |
-                .[] | select(.id != $latest and (.tags.PackerLifecycle == "retained" or .tags.PackerLifecycle == "temporary")) | .id
+                .[] | (.systemData.createdAt // .publishingProfile.publishedDate) as $created |
+                select($created != null and $created < $cutoff and .id != $latest and (.tags.PackerLifecycle == "retained" or .tags.PackerLifecycle == "temporary")) | .id
               ' <<< "${image_versions}")"
             fi
           done
 
           vm_resources="$(az vm list \
             --resource-group "${AZURE_RESOURCE_GROUP}" \
-            --query "[?tags.ManagedBy=='perf-dashboard' && starts_with(not_null(tags.RunId, ''), 'quic-perf-azure-')].[id,storageProfile.osDisk.managedDisk.id]" \
+            --query "[?tags.ManagedBy=='perf-dashboard' && starts_with(not_null(tags.RunId, ''), 'quic-perf-azure-') && timeCreated < '${CLEANUP_BEFORE}'].[id,storageProfile.osDisk.managedDisk.id]" \
             --output tsv)"
 
           delete_resources "Azure benchmark VMs" "$(printf '%s\n' "${vm_resources}" | cut -f1 | sed '/^$/d')"
@@ -259,7 +265,7 @@ jobs:
 
           delete_resources "Azure benchmark orphan disks" "$(az disk list \
             --resource-group "${AZURE_RESOURCE_GROUP}" \
-            --query "[?starts_with(not_null(tags.RunId, ''), 'quic-perf-azure-') || starts_with(name, 'quic-perf-azure-')].id" \
+            --query "[?(starts_with(not_null(tags.RunId, ''), 'quic-perf-azure-') || starts_with(name, 'quic-perf-azure-')) && timeCreated < '${CLEANUP_BEFORE}'].id" \
             --output tsv)"
 
           for resource_type in \
@@ -274,6 +280,6 @@ jobs:
             delete_resources "Azure ${resource_type}" "$(az resource list \
               --resource-group "${AZURE_RESOURCE_GROUP}" \
               --resource-type "${resource_type}" \
-              --query "[?tags.ManagedBy=='perf-dashboard' && starts_with(not_null(tags.RunId, ''), 'quic-perf-azure-')].id" \
+              --query "[?tags.ManagedBy=='perf-dashboard' && starts_with(not_null(tags.RunId, ''), 'quic-perf-azure-') && createdTime < '${CLEANUP_BEFORE}'].id" \
               --output tsv)"
           done
