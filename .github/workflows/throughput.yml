@@ -129,6 +129,10 @@ on:
       client_machine_type:
         description: Client VM type (blank for the cloud's default)
         type: string
+      azure_image_version:
+        description: Azure Gallery image version (latest unless pinned)
+        type: string
+        default: latest
       download_bytes:
         description: Bytes to download per pairing
         type: number
@@ -156,6 +160,7 @@ jobs:
       client_location: ${{ inputs.client_location }}
       server_machine_type: ${{ inputs.server_machine_type }}
       client_machine_type: ${{ inputs.client_machine_type }}
+      azure_image_version: ${{ inputs.azure_image_version }}
       download_bytes: ${{ fromJSON(inputs.download_bytes) }}
       qlog: ${{ inputs.qlog }}
       skip_publish: ${{ inputs.skip_publish }}

@@ -1,5 +1,5 @@
 data "azurerm_shared_image_version" "runner" {
-  name                    = "latest"
+  name                    = var.azure_image_version
   gallery_name            = "quicperfrunner"
   image_name              = "quic-perf-runner-${var.architecture}"
   resource_group_name     = var.azure_resource_group
