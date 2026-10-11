@@ -27,3 +27,8 @@ variable "azure_resource_group" {
 variable "ssh_public_key" {
   type = string
 }
+
+variable "azure_image_version" {
+  type    = string
+  default = "latest"
+}

@@ -16,6 +16,9 @@ on:
         type: string
       client_machine_type:
         type: string
+      azure_image_version:
+        type: string
+        default: latest
       download_bytes:
         type: number
         default: 1000000000
@@ -40,6 +43,7 @@ env:
   TF_VAR_gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
   TF_VAR_azure_subscription_id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
   TF_VAR_azure_resource_group: ${{ vars.AZURE_RESOURCE_GROUP }}
+  TF_VAR_azure_image_version: ${{ inputs.azure_image_version }}
   TF_VAR_ssh_public_key: ${{ vars.SSH_PUBLIC_KEY_PRIMARY }}
 
 jobs:
