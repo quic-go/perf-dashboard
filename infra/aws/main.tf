@@ -73,6 +73,11 @@ resource "aws_security_group" "node" {
     Name      = var.name
     ManagedBy = "perf-dashboard"
     RunId     = var.name
+    CreatedAt = timestamp()
+  }
+
+  lifecycle {
+    ignore_changes = [tags["CreatedAt"]]
   }
 }
 
