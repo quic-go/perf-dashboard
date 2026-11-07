@@ -141,6 +141,10 @@ on:
         description: Capture quic-go qlogs (affects performance)
         type: boolean
         default: false
+      cross_pairings:
+        description: Also run quic-go against MsQuic, in both directions
+        type: boolean
+        default: true
       skip_publish:
         description: Skip publishing results to quic-go/perf-measurements
         type: boolean
@@ -163,4 +167,5 @@ jobs:
       azure_image_version: ${{ inputs.azure_image_version }}
       download_bytes: ${{ fromJSON(inputs.download_bytes) }}
       qlog: ${{ inputs.qlog }}
+      cross_pairings: ${{ inputs.cross_pairings }}
       skip_publish: ${{ inputs.skip_publish }}

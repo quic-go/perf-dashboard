@@ -30,6 +30,9 @@ on:
       qlog:
         type: boolean
         default: false
+      cross_pairings:
+        type: boolean
+        default: true
       skip_publish:
         type: boolean
         default: false
@@ -139,6 +142,7 @@ jobs:
       matrix:
         server_implementation: [quic-go, msquic]
         client_implementation: [quic-go, msquic]
+        exclude: ${{ fromJSON(inputs.cross_pairings && '[]' || '[{"server_implementation":"quic-go","client_implementation":"msquic"},{"server_implementation":"msquic","client_implementation":"quic-go"}]') }}
     steps:
       - uses: actions/checkout@v7
 
