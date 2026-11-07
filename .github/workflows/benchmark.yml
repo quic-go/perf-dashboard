@@ -123,6 +123,7 @@ jobs:
           path: |
             ${{ runner.temp }}/${{ matrix.role }}-node/terraform.tfstate
             ${{ runner.temp }}/${{ matrix.role }}-node/node.json
+            ${{ runner.temp }}/${{ matrix.role }}-node/terraform.tfvars.json
           retention-days: 1
           if-no-files-found: ignore
 
@@ -333,4 +334,4 @@ jobs:
           terraform -chdir=infra/${{ steps.target.outputs.provider }} init -input=false
           TF_VAR_name="quic-perf-${{ steps.target.outputs.provider }}-${{ matrix.role }}-${{ github.run_id }}-${{ github.run_attempt }}" \
             TF_VAR_location="${{ steps.target.outputs.location }}" \
-            terraform -chdir=infra/${{ steps.target.outputs.provider }} destroy -state="${state}" -input=false -auto-approve
+            terraform -chdir=infra/${{ steps.target.outputs.provider }} destroy -state="${state}" -var-file="$(dirname "${state}")/terraform.tfvars.json" -input=false -auto-approve
