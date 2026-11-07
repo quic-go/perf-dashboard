@@ -117,7 +117,7 @@ def main() -> int:
                 )
                 record["build_info"][role] = json.loads(metadata.stdout)
             try:
-                server_implementation.start_server(server)
+                server_implementation.start_server(server, args.test)
                 time.sleep(3)
                 address = args.server_address or args.server_host
                 match args.test:

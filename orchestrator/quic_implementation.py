@@ -1,6 +1,7 @@
 import os
 import shlex
 import subprocess
+import sys
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -72,7 +73,9 @@ class SSHNode:
 
 
 class QuicImplementation(ABC):
-    server_command: tuple[str, ...]
+    @abstractmethod
+    def server_command(self, test: str) -> tuple[str, ...]:
+        pass
 
     def collect_qlog(self, node: SSHNode, destination: Path) -> None:
         pass
@@ -96,8 +99,8 @@ class QuicImplementation(ABC):
     ) -> HandshakeResult:
         pass
 
-    def start_server(self, server: SSHNode) -> None:
-        command = shlex.join(self.server_command)
+    def start_server(self, server: SSHNode, test: str) -> None:
+        command = shlex.join(self.server_command(test))
         # The shell reaps the server so stop_server can wait for its exit.
         script = f"{command} & echo $! >/tmp/benchmark-server.pid; wait"
         server.run(
@@ -107,7 +110,10 @@ class QuicImplementation(ABC):
         )
 
     def stop_server(self, server: SSHNode) -> None:
+        # Give the server a second to finish closing the last connection and
+        # log its statistics.
         server.run(
+            "sleep 1; "
             "if [ -f /tmp/benchmark-server.pid ]; then "
             "pid=$(cat /tmp/benchmark-server.pid); "
             'kill "$pid" 2>/dev/null || true; '
@@ -117,3 +123,10 @@ class QuicImplementation(ABC):
             capture_output=True,
             timeout=15,
         )
+        log = server.run(
+            ("cat", "/tmp/benchmark-server.log"),
+            check=False,
+            capture_output=True,
+            timeout=30,
+        )
+        print("Server log:", log.stdout, sep="\n", file=sys.stderr, end="")

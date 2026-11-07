@@ -1,5 +1,6 @@
 import json
 import math
+import sys
 from pathlib import Path
 
 from quic_implementation import (
@@ -40,11 +41,8 @@ def _parse_result(output: str, test: str) -> ThroughputResult | HandshakeResult:
 
 
 class QuicGoImplementation(QuicImplementation):
-    server_command = (
-        "/opt/quic-go/perf/quic-go-perf",
-        "server",
-        "--address=0.0.0.0:4433",
-    )
+    def server_command(self, test: str) -> tuple[str, ...]:
+        return ("/opt/quic-go/perf/quic-go-perf", "server", "--address=0.0.0.0:4433")
 
     def collect_qlog(self, node: SSHNode, destination: Path) -> None:
         with destination.open("wb") as archive:
@@ -71,7 +69,9 @@ class QuicGoImplementation(QuicImplementation):
             capture_output=True,
             timeout=15 * 60,
         )
-        return _parse_result(completed.stdout + completed.stderr, "throughput")
+        output = completed.stdout + completed.stderr
+        print("Client output:", output, sep="\n", file=sys.stderr, end="")
+        return _parse_result(output, "throughput")
 
     def run_handshake_test(
         self,

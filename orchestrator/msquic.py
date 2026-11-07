@@ -1,4 +1,5 @@
 import re
+import sys
 
 from quic_implementation import (
     HandshakeResult,
@@ -31,11 +32,21 @@ def _parse_result(output: str, test: str) -> ThroughputResult | HandshakeResult:
 
 
 class MsQuicImplementation(QuicImplementation):
-    server_command = (
-        "/opt/msquic/build/bin/Release/secnetperf",
-        "-exec:maxtput",
-        "-bind:0.0.0.0",
-    )
+    def server_command(self, test: str) -> tuple[str, ...]:
+        # Line-buffer stdout. Otherwise, the statistics would still be buffered
+        # when the server is killed at the end of the benchmark.
+        command = (
+            "stdbuf",
+            "-oL",
+            "/opt/msquic/build/bin/Release/secnetperf",
+            "-exec:maxtput",
+            "-bind:0.0.0.0",
+        )
+        if test == "throughput":
+            # Print each connection's statistics when it closes. In handshake
+            # benchmarks, this would print statistics for every handshake.
+            command += ("-stats:1",)
+        return command
 
     def run_throughput_test(
         self,
@@ -60,11 +71,14 @@ class MsQuicImplementation(QuicImplementation):
                 "-up:0",
                 f"-down:{size}{unit}",
                 "-pctput:1",
+                "-pconn:1",
             ),
             capture_output=True,
             timeout=15 * 60,
         )
-        return _parse_result(completed.stdout + completed.stderr, "throughput")
+        output = completed.stdout + completed.stderr
+        print("Client output:", output, sep="\n", file=sys.stderr, end="")
+        return _parse_result(output, "throughput")
 
     def run_handshake_test(
         self,
