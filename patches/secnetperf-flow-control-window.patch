@@ -1,0 +1,10 @@
+--- a/src/perf/lib/PerfClient.h
++++ b/src/perf/lib/PerfClient.h
+@@ -166,6 +166,7 @@
+         Registration,
+         MsQuicAlpn(PERF_ALPN),
+         MsQuicSettings()
++            .SetConnFlowControlWindow(0x40000000)
+             .SetDisconnectTimeoutMs(PERF_DEFAULT_DISCONNECT_TIMEOUT)
+             .SetIdleTimeoutMs(PERF_DEFAULT_IDLE_TIMEOUT)
+             .SetSendBufferingEnabled(false)

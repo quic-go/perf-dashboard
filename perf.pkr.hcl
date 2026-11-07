@@ -248,6 +248,14 @@ build {
     ]
   }
 
+  # secnetperf's client uses MsQuic's default 16 MiB connection flow-control
+  # window, which limits a download to 16 MiB per RTT. The patch raises it to
+  # 1 GiB, like quic-go/perf, so that flow control doesn't limit the throughput.
+  provisioner "file" {
+    source      = "${path.root}/patches/secnetperf-flow-control-window.patch"
+    destination = "/tmp/secnetperf-flow-control-window.patch"
+  }
+
   # Build MsQuic with the perf tool enabled.
   provisioner "shell" {
     environment_vars = ["DEBIAN_FRONTEND=noninteractive"]
@@ -259,6 +267,7 @@ build {
       "echo '=== Cloning microsoft/msquic to /opt/msquic ==='",
       "sudo git clone --depth 1 --branch main --single-branch https://github.com/microsoft/msquic.git /opt/msquic",
       "sudo git -C /opt/msquic submodule update --init --recursive --depth 1",
+      "sudo git -C /opt/msquic apply /tmp/secnetperf-flow-control-window.patch",
 
       "echo '=== Building MsQuic with QUIC_BUILD_PERF=ON ==='",
       "sudo mkdir -p /opt/msquic/build",
