@@ -59,6 +59,8 @@ runs:
         node_dir="${RUNNER_TEMP}/${ROLE}-node"
         mkdir -p "${node_dir}"
         cp -R "${GITHUB_WORKSPACE}/infra/${CLOUD_PROVIDER}/." "${node_dir}/"
+        # destroy needs the same variables to look up the image data source
+        jq -n '{machine_type: env.TF_VAR_machine_type, architecture: env.TF_VAR_architecture} | del(.[] | nulls)' > "${node_dir}/terraform.tfvars.json"
         terraform -chdir="${node_dir}" init -input=false
         terraform -chdir="${node_dir}" apply -input=false -auto-approve
 
