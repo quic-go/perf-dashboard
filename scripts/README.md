@@ -1,6 +1,6 @@
 # Scripts
 
-`setup-gcp-workload-identity.sh` creates the GCP service account and Workload Identity Federation setup used by GitHub Actions.
+`setup-gcp-workload-identity.sh` creates the GCP service account and Workload Identity Federation setup used by GitHub Actions. It also raises the MTU of the project's default network to 1,500 bytes.
 
 `setup-aws-workload-identity.sh` creates the AWS IAM role and GitHub OIDC provider used by GitHub Actions. The role gets EC2 admin permissions inside the dedicated `quic-perf-dashboard` AWS account.
 

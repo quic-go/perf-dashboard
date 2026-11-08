@@ -34,6 +34,13 @@ gcloud iam service-accounts add-iam-policy-binding "${SERVICE_ACCOUNT}" \
   --role="roles/iam.workloadIdentityUser" \
   --member="principalSet://iam.googleapis.com/projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/github-actions/attribute.repository/${REPO}"
 
+# The benchmark nodes use the default network, which GCP creates with a
+# 1,460-byte MTU. Raise it to the 1,500 bytes of AWS and Azure, so that
+# MsQuic's 1,500-byte path MTU probes aren't lost.
+gcloud compute networks update default \
+  --project="${PROJECT_ID}" \
+  --mtu=1500
+
 cat <<EOF
 
 Set these GitHub repository variables:
