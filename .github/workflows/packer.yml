@@ -209,13 +209,16 @@ jobs:
             --gallery-name quicperfrunner \
             --tags ManagedBy=packer PackerLifecycle=retained \
             --output none
+          # x86 v6 sizes such as Dsv6 only boot images whose definition supports
+          # NVMe. Azure can't change the features of an existing definition, so
+          # changing them means deleting the definition first.
           az sig image-definition create \
             --resource-group "${PKR_VAR_azure_resource_group}" \
             --gallery-name quicperfrunner \
             --gallery-image-definition "quic-perf-runner-${PKR_VAR_architecture}" \
             --publisher quic-go --offer perf-dashboard --sku "runner-${PKR_VAR_architecture}" \
             --os-type Linux --os-state Generalized --architecture "${{ matrix.architecture == 'amd64' && 'x64' || 'Arm64' }}" \
-            --hyper-v-generation V2 --features SecurityType=Standard \
+            --hyper-v-generation V2 --features "SecurityType=Standard DiskControllerTypes=SCSI,NVMe" \
             --tags ManagedBy=packer PackerLifecycle=retained \
             --output none
       - uses: hashicorp/setup-packer@ce93c3c08a6c2ff2275bf4b54ff0d9a75f6c9789 # v3.4.0
