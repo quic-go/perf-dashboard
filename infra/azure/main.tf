@@ -37,6 +37,9 @@ resource "azurerm_shared_image" "runner" {
   hyper_v_generation  = "V2"
   architecture        = var.architecture == "arm64" ? "Arm64" : "x64"
 
+  # Like the definition in packer.yml, so that NVMe-only sizes such as Dsv6 can boot the copy.
+  disk_controller_type_nvme_enabled = true
+
   identifier {
     publisher = "quic-go"
     offer     = "perf-dashboard"
