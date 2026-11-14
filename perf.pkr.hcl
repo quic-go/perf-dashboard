@@ -256,10 +256,7 @@ build {
     destination = "/tmp/secnetperf-flow-control-window.patch"
   }
 
-  # Both perf clients close each connection before acknowledging HANDSHAKE_DONE,
-  # so under handshake load MsQuic's server soon answers with Retry, which
-  # throttles the handshake benchmark. The patch turns Retry off, like
-  # quic-go/perf's server, which never sends it.
+  # secnetperf's server would throttle handshake benchmarks by sending Retry.
   provisioner "file" {
     source      = "${path.root}/patches/secnetperf-no-retry.patch"
     destination = "/tmp/secnetperf-no-retry.patch"
