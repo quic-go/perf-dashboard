@@ -1,0 +1,23 @@
+--- a/src/perf/lib/PerfServer.cpp
++++ b/src/perf/lib/PerfServer.cpp
+@@ -31,6 +31,20 @@ PerfServer::Init(
+ 
+     TryGetValue(argc, argv, "stats", &PrintStats);
+ 
++    //
++    // Never send Retry. The perf clients close each connection right after the
++    // handshake, before acknowledging HANDSHAKE_DONE, so every connection
++    // counts against the Retry memory limit until it's cleaned up, and Retry
++    // would throttle the handshake benchmark.
++    //
++    MsQuicGlobalSettings RetrySettings;
++    RetrySettings.SetRetryMemoryLimit(UINT16_MAX);
++    QUIC_STATUS RetryStatus;
++    if (QUIC_FAILED(RetryStatus = RetrySettings.Set())) {
++        WriteOutput("Failed to disable Retry %d\n", RetryStatus);
++        return RetryStatus;
++    }
++
+     const char* LocalAddress = nullptr;
+     uint16_t Port = 0;
+     if (TryGetValue(argc, argv, "bind", &LocalAddress)) {
