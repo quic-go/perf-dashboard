@@ -1,0 +1,10 @@
+--- a/src/perf/lib/PerfServer.cpp
++++ b/src/perf/lib/PerfServer.cpp
+@@ -30,6 +30,7 @@ PerfServer::Init(
+     }
+ 
+     TryGetValue(argc, argv, "stats", &PrintStats);
++    MsQuicGlobalSettings().SetRetryMemoryLimit(UINT16_MAX).Set();
+ 
+     const char* LocalAddress = nullptr;
+     uint16_t Port = 0;

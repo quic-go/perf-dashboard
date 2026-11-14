@@ -256,6 +256,12 @@ build {
     destination = "/tmp/secnetperf-flow-control-window.patch"
   }
 
+  # secnetperf's server would throttle handshake benchmarks by sending Retry.
+  provisioner "file" {
+    source      = "${path.root}/patches/secnetperf-no-retry.patch"
+    destination = "/tmp/secnetperf-no-retry.patch"
+  }
+
   # Build MsQuic with the perf tool enabled.
   provisioner "shell" {
     environment_vars = ["DEBIAN_FRONTEND=noninteractive"]
@@ -268,6 +274,7 @@ build {
       "sudo git clone --depth 1 --branch main --single-branch https://github.com/microsoft/msquic.git /opt/msquic",
       "sudo git -C /opt/msquic submodule update --init --recursive --depth 1",
       "sudo git -C /opt/msquic apply /tmp/secnetperf-flow-control-window.patch",
+      "sudo git -C /opt/msquic apply /tmp/secnetperf-no-retry.patch",
 
       "echo '=== Building MsQuic with QUIC_BUILD_PERF=ON ==='",
       "sudo mkdir -p /opt/msquic/build",
